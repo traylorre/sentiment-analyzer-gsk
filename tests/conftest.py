@@ -80,6 +80,9 @@ def pytest_collection_modifyitems(config, items):
 os.environ.setdefault("AWS_ACCESS_KEY_ID", "testing")
 os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
 os.environ.setdefault("AWS_REGION", "us-east-1")
+# botocore resolves region from AWS_DEFAULT_REGION only; AWS_REGION alone is not enough
+# for bare boto3.client()/Session() calls (Lambda's runtime sets both).
+os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
 os.environ.setdefault("SSE_POLL_INTERVAL", "1")
 os.environ.setdefault("SSE_HEARTBEAT_INTERVAL", "1")  # Fast heartbeats for tests
 
@@ -401,6 +404,7 @@ def aws_credentials():
     os.environ["AWS_SECURITY_TOKEN"] = "testing"
     os.environ["AWS_SESSION_TOKEN"] = "testing"
     os.environ["AWS_REGION"] = "us-east-1"
+    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 
     yield
 

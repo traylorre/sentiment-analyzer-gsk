@@ -119,3 +119,15 @@ variable "enable_canary" {
   type        = bool
   default     = false
 }
+
+variable "ingestion_schedule_rule_name" {
+  description = "Name of the EventBridge ingestion schedule rule the backfill quiesces; passed as a name, not module output, because routing the eventbridge ARN into this module closes a dependency cycle through the lambda roles (feature 001-signed-fanout)"
+  type        = string
+  default     = ""
+}
+
+variable "operator_principal_arn" {
+  description = "Principal allowed to assume the backfill role; empty falls back to the account root (feature 001-signed-fanout)"
+  type        = string
+  default     = ""
+}

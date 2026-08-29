@@ -1,179 +1,55 @@
 """
-Tests for time-series write fanout.
+Tests for the accumulating time-series fanout writer.
 
-Canonical References:
-- [CS-001] AWS DynamoDB Best Practices: "Pre-aggregate at write time for known query patterns"
-- [CS-003] Rick Houlihan re:Invent 2018: "Write amplification acceptable when reads >> writes"
-- [CS-013] AWS DynamoDB TTL: "Use TTL to automatically expire items"
-- [CS-014] AWS Architecture Blog: "Resolution-dependent retention policies"
-
-TDD-FANOUT-001: Single score produces 6 resolution items
-TDD-FANOUT-002: Each item has correctly aligned bucket timestamp
-TDD-FANOUT-003: TTL varies by resolution (1m=6h, 5m=12h, 1h=7d, 24h=90d)
-TDD-FANOUT-004: BatchWriteItem used (not individual PutItem)
+Contract under test (research D1/D8, data-model.md):
+- accumulate_fanout reads the bucket, computes the complete next state
+  locally, and writes it with a single conditional PutItem per resolution.
+- Guard has two branches: `version = :expected` when the read returned a
+  version, `attribute_not_exists(version)` when it did not (covers absent
+  buckets and legacy pre-cutover buckets alike).
+- On ConditionalCheckFailedException: bounded, jittered retry after re-read.
+- Statistics: count/sum/avg over signed contributions; open/close ordered by
+  article timestamp via open_ts/close_ts; high/low extremes; label_counts
+  merged; sources a bounded provider-name string set; is_partial always True.
 """
 
-from datetime import UTC, datetime
-from unittest.mock import MagicMock, patch
+import random
+from datetime import datetime
+from unittest.mock import patch
 
 import boto3
 import pytest
 from botocore.exceptions import ClientError
 from moto import mock_aws
 
-from src.lib.timeseries import (
-    Resolution,
-    SentimentScore,
-    generate_fanout_items,
-    write_fanout,
-    write_fanout_with_update,
-)
+from src.lib.timeseries import Resolution, SentimentScore
+from src.lib.timeseries.fanout import accumulate_fanout
+
+TABLE = "test-sentiment-timeseries"
 
 
 def parse_iso(s: str) -> datetime:
-    """Parse ISO8601 timestamp with timezone."""
     return datetime.fromisoformat(s.replace("Z", "+00:00"))
 
 
-class TestWriteFanout:
-    """
-    Canonical: [CS-001] "Pre-aggregate at write time for known query patterns"
-    [CS-003] "Write amplification acceptable when reads >> writes"
-    """
+def make_score(
+    value: float,
+    label: str,
+    ts: str = "2025-12-21T10:35:47Z",
+    ticker: str = "AAPL",
+    source: str = "tiingo",
+) -> SentimentScore:
+    return SentimentScore(
+        ticker=ticker, value=value, label=label, timestamp=parse_iso(ts), source=source
+    )
 
-    def test_fanout_creates_6_resolution_items(self):
-        """Single sentiment score MUST produce 6 DynamoDB items (one per resolution)."""
-        score = SentimentScore(
-            ticker="AAPL",
-            value=0.75,
-            label="positive",
-            timestamp=parse_iso("2025-12-21T10:35:47Z"),
-        )
-        items = generate_fanout_items(score)
-        assert len(items) == 6
-        resolutions = {item["PK"]["S"].split("#")[1] for item in items}
-        assert resolutions == {"1m", "5m", "15m", "30m", "1h", "24h"}
 
-    def test_fanout_bucket_timestamps_aligned(self):
-        """Each resolution item MUST have correctly aligned bucket timestamp."""
-        score = SentimentScore(
-            ticker="AAPL",
-            value=0.75,
-            timestamp=parse_iso("2025-12-21T10:37:47Z"),
-        )
-        items = generate_fanout_items(score)
-
-        # Find 1m bucket - should truncate to :37:00
-        item_1m = next(i for i in items if "1m" in i["PK"]["S"])
-        assert item_1m["SK"]["S"] == "2025-12-21T10:37:00+00:00"
-
-        # Find 5m bucket - should truncate to :35:00
-        item_5m = next(i for i in items if "5m" in i["PK"]["S"])
-        assert item_5m["SK"]["S"] == "2025-12-21T10:35:00+00:00"
-
-        # Find 1h bucket - should truncate to :00:00
-        item_1h = next(i for i in items if "1h" in i["PK"]["S"])
-        assert item_1h["SK"]["S"] == "2025-12-21T10:00:00+00:00"
-
-    def test_fanout_includes_ohlc_values(self):
-        """Fanout items MUST include OHLC values from score."""
-        score = SentimentScore(
-            ticker="TSLA",
-            value=0.5,
-            label="neutral",
-            timestamp=parse_iso("2025-12-21T14:22:00Z"),
-        )
-        items = generate_fanout_items(score)
-
-        # Check any item has OHLC values
-        item = items[0]
-        assert "open" in item
-        assert "high" in item
-        assert "low" in item
-        assert "close" in item
-        assert "count" in item
-        assert float(item["open"]["N"]) == 0.5
-        assert float(item["high"]["N"]) == 0.5
-        assert float(item["low"]["N"]) == 0.5
-        assert float(item["close"]["N"]) == 0.5
-        assert int(item["count"]["N"]) == 1
-
-    def test_fanout_includes_label_counts(self):
-        """Fanout items MUST include label counts."""
-        score = SentimentScore(
-            ticker="AAPL",
-            value=0.75,
-            label="positive",
-            timestamp=parse_iso("2025-12-21T10:35:00Z"),
-        )
-        items = generate_fanout_items(score)
-
-        item = items[0]
-        assert "label_counts" in item
-        label_counts = item["label_counts"]["M"]
-        assert "positive" in label_counts
-        assert int(label_counts["positive"]["N"]) == 1
-
-    def test_fanout_ttl_resolution_dependent(self):
-        """
-        TTL MUST vary by resolution per [CS-014]:
-        - 1m: 6 hours
-        - 5m: 12 hours
-        - 1h: 7 days
-        - 24h: 90 days
-        """
-        score = SentimentScore(
-            ticker="AAPL",
-            value=0.75,
-            timestamp=parse_iso("2025-12-21T10:35:00Z"),
-        )
-        items = generate_fanout_items(score)
-
-        item_1m = next(i for i in items if "1m" in i["PK"]["S"])
-        item_24h = next(i for i in items if "24h" in i["PK"]["S"])
-
-        # 1m TTL should be ~6 hours from bucket timestamp
-        ttl_1m = int(item_1m["ttl"]["N"])
-        expected_1m = int(parse_iso("2025-12-21T10:35:00Z").timestamp()) + (6 * 3600)
-        assert ttl_1m == expected_1m
-
-        # 24h TTL should be ~90 days from bucket timestamp
-        ttl_24h = int(item_24h["ttl"]["N"])
-        expected_24h = int(parse_iso("2025-12-21T00:00:00Z").timestamp()) + (90 * 86400)
-        assert ttl_24h == expected_24h
-
-    def test_fanout_ticker_in_pk(self):
-        """PK MUST include ticker: {ticker}#{resolution}."""
-        score = SentimentScore(
-            ticker="MSFT",
-            value=-0.25,
-            timestamp=parse_iso("2025-12-21T08:00:00Z"),
-        )
-        items = generate_fanout_items(score)
-
-        for item in items:
-            pk = item["PK"]["S"]
-            assert pk.startswith("MSFT#"), f"PK should start with MSFT#, got {pk}"
-
-    def test_fanout_is_partial_true(self):
-        """New fanout items MUST have is_partial=true."""
-        score = SentimentScore(
-            ticker="AAPL",
-            value=0.75,
-            timestamp=parse_iso("2025-12-21T10:35:00Z"),
-        )
-        items = generate_fanout_items(score)
-
-        for item in items:
-            assert item["is_partial"]["BOOL"] is True
-
-    @mock_aws
-    def test_fanout_uses_batch_write(self):
-        """Fanout MUST use BatchWriteItem for efficiency, not individual PutItem."""
-        # Setup
-        dynamodb = boto3.client("dynamodb", region_name="us-east-1")
-        dynamodb.create_table(
-            TableName="test-timeseries",
+@pytest.fixture
+def dynamodb_client():
+    with mock_aws():
+        client = boto3.client("dynamodb", region_name="us-east-1")
+        client.create_table(
+            TableName=TABLE,
             KeySchema=[
                 {"AttributeName": "PK", "KeyType": "HASH"},
                 {"AttributeName": "SK", "KeyType": "RANGE"},
@@ -184,280 +60,315 @@ class TestWriteFanout:
             ],
             BillingMode="PAY_PER_REQUEST",
         )
+        yield client
 
-        score = SentimentScore(
-            ticker="AAPL",
-            value=0.75,
-            timestamp=datetime.now(UTC),
-        )
 
-        # Execute
-        with patch.object(
-            dynamodb, "batch_write_item", wraps=dynamodb.batch_write_item
-        ) as mock_batch:
-            write_fanout(dynamodb, "test-timeseries", score)
-            mock_batch.assert_called_once()
+def get_bucket(client, ticker: str, resolution: str, sk: str) -> dict:
+    resp = client.get_item(
+        TableName=TABLE,
+        Key={"PK": {"S": f"{ticker}#{resolution}"}, "SK": {"S": sk}},
+        ConsistentRead=True,
+    )
+    return resp.get("Item")
 
-        # Verify all items written
-        response = dynamodb.scan(TableName="test-timeseries")
-        assert response["Count"] == 6
 
-    @mock_aws
-    def test_fanout_update_existing_bucket(self):
-        """
-        Write to existing bucket MUST:
-        1. Update OHLC (keep open, update high/low/close)
-        2. Increment count
-        3. Add to label_counts
-        """
-        dynamodb = boto3.client("dynamodb", region_name="us-east-1")
-        dynamodb.create_table(
-            TableName="test-timeseries",
-            KeySchema=[
-                {"AttributeName": "PK", "KeyType": "HASH"},
-                {"AttributeName": "SK", "KeyType": "RANGE"},
-            ],
-            AttributeDefinitions=[
-                {"AttributeName": "PK", "AttributeType": "S"},
-                {"AttributeName": "SK", "AttributeType": "S"},
-            ],
-            BillingMode="PAY_PER_REQUEST",
-        )
+class TestAccumulateCreates:
+    def test_first_write_creates_six_versioned_buckets(self, dynamodb_client):
+        accumulate_fanout(dynamodb_client, TABLE, make_score(0.8, "positive"))
 
-        # First score
-        score1 = SentimentScore(
-            ticker="AAPL",
-            value=0.5,
-            label="neutral",
-            timestamp=parse_iso("2025-12-21T10:35:30Z"),
-        )
-        write_fanout_with_update(dynamodb, "test-timeseries", score1)
-
-        # Second score in same bucket
-        score2 = SentimentScore(
-            ticker="AAPL",
-            value=0.8,
-            label="positive",
-            timestamp=parse_iso("2025-12-21T10:35:45Z"),
-        )
-        write_fanout_with_update(dynamodb, "test-timeseries", score2)
-
-        # Check 1m bucket
-        response = dynamodb.get_item(
-            TableName="test-timeseries",
-            Key={
-                "PK": {"S": "AAPL#1m"},
-                "SK": {"S": "2025-12-21T10:35:00+00:00"},
-            },
-        )
-
-        item = response["Item"]
-        # Open should be first value, close should be last
-        assert float(item["open"]["N"]) == 0.5
-        assert float(item["close"]["N"]) == 0.8
-        assert float(item["high"]["N"]) == 0.8
-        assert float(item["low"]["N"]) == 0.5
-        assert int(item["count"]["N"]) == 2
-
-        # Check label counts
-        label_counts = item["label_counts"]["M"]
-        assert int(label_counts["neutral"]["N"]) == 1
-        assert int(label_counts["positive"]["N"]) == 1
-
-    @mock_aws
-    def test_fanout_all_resolutions_have_items(self):
-        """All 6 resolutions MUST have items after write."""
-        dynamodb = boto3.client("dynamodb", region_name="us-east-1")
-        dynamodb.create_table(
-            TableName="test-timeseries",
-            KeySchema=[
-                {"AttributeName": "PK", "KeyType": "HASH"},
-                {"AttributeName": "SK", "KeyType": "RANGE"},
-            ],
-            AttributeDefinitions=[
-                {"AttributeName": "PK", "AttributeType": "S"},
-                {"AttributeName": "SK", "AttributeType": "S"},
-            ],
-            BillingMode="PAY_PER_REQUEST",
-        )
-
-        score = SentimentScore(
-            ticker="AAPL",
-            value=0.75,
-            timestamp=datetime.now(UTC),
-        )
-        write_fanout(dynamodb, "test-timeseries", score)
-
-        # Verify we can query each resolution
         for resolution in Resolution:
-            response = dynamodb.query(
-                TableName="test-timeseries",
+            resp = dynamodb_client.query(
+                TableName=TABLE,
                 KeyConditionExpression="PK = :pk",
                 ExpressionAttributeValues={":pk": {"S": f"AAPL#{resolution.value}"}},
             )
-            assert response["Count"] >= 1, f"No items for resolution {resolution.value}"
+            assert resp["Count"] == 1, resolution
+            item = resp["Items"][0]
+            assert item["version"]["N"] == "1"
+            assert item["count"]["N"] == "1"
+            assert float(item["sum"]["N"]) == 0.8
+            assert float(item["avg"]["N"]) == 0.8
+            assert item["is_partial"]["BOOL"] is True
 
-    def test_fanout_missing_ticker_raises(self):
-        """Score without ticker MUST raise ValueError."""
-        score = SentimentScore(
-            value=0.75,
-            timestamp=parse_iso("2025-12-21T10:35:00Z"),
+    def test_first_write_records_ohlc_and_timestamps(self, dynamodb_client):
+        accumulate_fanout(
+            dynamodb_client, TABLE, make_score(-0.9, "negative", "2025-12-21T10:35:47Z")
         )
-        with pytest.raises(ValueError, match="ticker"):
-            generate_fanout_items(score)
 
-    def test_fanout_source_tracking(self):
-        """Fanout items MUST track data sources."""
-        score = SentimentScore(
-            ticker="AAPL",
-            value=0.75,
-            source="tiingo",
-            timestamp=parse_iso("2025-12-21T10:35:00Z"),
+        item = get_bucket(dynamodb_client, "AAPL", "24h", "2025-12-21T00:00:00+00:00")
+        for field in ("open", "high", "low", "close"):
+            assert float(item[field]["N"]) == -0.9
+        assert item["open_ts"]["S"] == "2025-12-21T10:35:47+00:00"
+        assert item["close_ts"]["S"] == "2025-12-21T10:35:47+00:00"
+
+    def test_sources_written_as_provider_string_set(self, dynamodb_client):
+        accumulate_fanout(dynamodb_client, TABLE, make_score(0.8, "positive"))
+
+        item = get_bucket(dynamodb_client, "AAPL", "24h", "2025-12-21T00:00:00+00:00")
+        assert item["sources"] == {"SS": ["tiingo"]}
+
+
+class TestAccumulateStatistics:
+    def test_spec_us2_example(self, dynamodb_client):
+        """Three articles: positive 0.8, negative 0.9, positive 0.6 into one window."""
+        accumulate_fanout(
+            dynamodb_client, TABLE, make_score(0.8, "positive", "2025-12-21T10:01:00Z")
         )
-        items = generate_fanout_items(score)
+        accumulate_fanout(
+            dynamodb_client, TABLE, make_score(-0.9, "negative", "2025-12-21T10:02:00Z")
+        )
+        accumulate_fanout(
+            dynamodb_client, TABLE, make_score(0.6, "positive", "2025-12-21T10:03:00Z")
+        )
 
-        item = items[0]
-        assert "sources" in item
-        sources = item["sources"]["L"]
-        assert {"S": "tiingo"} in sources
+        item = get_bucket(dynamodb_client, "AAPL", "24h", "2025-12-21T00:00:00+00:00")
+        assert item["count"]["N"] == "3"
+        assert float(item["sum"]["N"]) == pytest.approx(0.5)
+        assert float(item["avg"]["N"]) == pytest.approx(0.5 / 3)
+        assert float(item["high"]["N"]) == 0.8
+        assert float(item["low"]["N"]) == -0.9
+        assert item["label_counts"]["M"]["positive"]["N"] == "2"
+        assert item["label_counts"]["M"]["negative"]["N"] == "1"
+        assert item["version"]["N"] == "3"
+
+    def test_open_close_ordered_by_article_timestamp(self, dynamodb_client):
+        """Out-of-order arrival: the later-arriving but earlier-timestamped
+        article becomes open, not close."""
+        accumulate_fanout(
+            dynamodb_client, TABLE, make_score(0.7, "positive", "2025-12-21T12:00:00Z")
+        )
+        accumulate_fanout(
+            dynamodb_client, TABLE, make_score(-0.6, "negative", "2025-12-21T09:00:00Z")
+        )
+
+        item = get_bucket(dynamodb_client, "AAPL", "24h", "2025-12-21T00:00:00+00:00")
+        assert float(item["open"]["N"]) == -0.6
+        assert item["open_ts"]["S"] == "2025-12-21T09:00:00+00:00"
+        assert float(item["close"]["N"]) == 0.7
+        assert item["close_ts"]["S"] == "2025-12-21T12:00:00+00:00"
+
+    def test_is_partial_stays_true_across_writes(self, dynamodb_client):
+        accumulate_fanout(dynamodb_client, TABLE, make_score(0.8, "positive"))
+        accumulate_fanout(dynamodb_client, TABLE, make_score(0.6, "positive"))
+
+        item = get_bucket(dynamodb_client, "AAPL", "24h", "2025-12-21T00:00:00+00:00")
+        assert item["is_partial"]["BOOL"] is True
+
+    def test_sources_deduplicate_across_providers(self, dynamodb_client):
+        accumulate_fanout(
+            dynamodb_client, TABLE, make_score(0.8, "positive", source="tiingo")
+        )
+        accumulate_fanout(
+            dynamodb_client, TABLE, make_score(0.6, "positive", source="finnhub")
+        )
+        accumulate_fanout(
+            dynamodb_client, TABLE, make_score(0.7, "positive", source="finnhub")
+        )
+
+        item = get_bucket(dynamodb_client, "AAPL", "24h", "2025-12-21T00:00:00+00:00")
+        assert sorted(item["sources"]["SS"]) == ["finnhub", "tiingo"]
 
 
-# 1220-xray-instrumentation-hardening: Fanout metric emission tests
+class TestConditionGuard:
+    def _capture_puts(self, client):
+        calls = []
+        original = client.put_item
+
+        def recording_put(**kwargs):
+            calls.append(kwargs)
+            return original(**kwargs)
+
+        return calls, recording_put
+
+    def test_absent_bucket_uses_attribute_not_exists(self, dynamodb_client):
+        calls, recorder = self._capture_puts(dynamodb_client)
+        with patch.object(dynamodb_client, "put_item", recorder):
+            accumulate_fanout(dynamodb_client, TABLE, make_score(0.8, "positive"))
+
+        assert len(calls) == 6
+        for call in calls:
+            assert call["ConditionExpression"] == "attribute_not_exists(version)"
+
+    def test_versioned_bucket_guards_on_expected_version(self, dynamodb_client):
+        accumulate_fanout(dynamodb_client, TABLE, make_score(0.8, "positive"))
+
+        calls, recorder = self._capture_puts(dynamodb_client)
+        with patch.object(dynamodb_client, "put_item", recorder):
+            accumulate_fanout(dynamodb_client, TABLE, make_score(0.6, "positive"))
+
+        assert len(calls) == 6
+        for call in calls:
+            assert call["ConditionExpression"] == "version = :expected"
+            assert call["ExpressionAttributeValues"][":expected"] == {"N": "1"}
+            assert call["Item"]["version"]["N"] == "2"
+
+    def test_legacy_unversioned_bucket_adopted(self, dynamodb_client):
+        """A pre-cutover bucket (no version attribute) is written through the
+        attribute_not_exists(version) branch and comes out versioned."""
+        dynamodb_client.put_item(
+            TableName=TABLE,
+            Item={
+                "PK": {"S": "AAPL#24h"},
+                "SK": {"S": "2025-12-21T00:00:00+00:00"},
+                "open": {"N": "0.95"},
+                "high": {"N": "0.95"},
+                "low": {"N": "0.95"},
+                "close": {"N": "0.95"},
+                "count": {"N": "1"},
+                "sum": {"N": "0.95"},
+                "avg": {"N": "0.95"},
+                "is_partial": {"BOOL": True},
+                "sources": {"L": [{"S": "dedup:abc"}]},
+                "label_counts": {"M": {"positive": {"N": "1"}}},
+                "original_timestamp": {"S": "2025-12-21T08:00:00+00:00"},
+                "ttl": {"N": "1766448000"},
+            },
+        )
+
+        calls, recorder = self._capture_puts(dynamodb_client)
+        with patch.object(dynamodb_client, "put_item", recorder):
+            accumulate_fanout(
+                dynamodb_client,
+                TABLE,
+                make_score(-0.9, "negative", "2025-12-21T10:00:00Z"),
+            )
+
+        adopt = [c for c in calls if c["Item"]["PK"]["S"] == "AAPL#24h"]
+        assert adopt[0]["ConditionExpression"] == "attribute_not_exists(version)"
+
+        item = get_bucket(dynamodb_client, "AAPL", "24h", "2025-12-21T00:00:00+00:00")
+        assert item["version"]["N"] == "1"
+        assert item["count"]["N"] == "2"
+        assert float(item["low"]["N"]) == -0.9
+        # Legacy dedup: list is dropped; sources restart as a provider set.
+        assert item["sources"] == {"SS": ["tiingo"]}
+
+    def test_conditional_failure_retries_and_succeeds(self, dynamodb_client):
+        """Loser of a version race re-reads and retries."""
+        failures = {"n": 0}
+        original = dynamodb_client.put_item
+
+        def flaky_put(**kwargs):
+            if failures["n"] < 3:
+                failures["n"] += 1
+                raise ClientError(
+                    {"Error": {"Code": "ConditionalCheckFailedException"}},
+                    "PutItem",
+                )
+            return original(**kwargs)
+
+        with (
+            patch.object(dynamodb_client, "put_item", flaky_put),
+            patch("src.lib.timeseries.fanout.time.sleep") as mock_sleep,
+        ):
+            accumulate_fanout(dynamodb_client, TABLE, make_score(0.8, "positive"))
+
+        assert failures["n"] == 3
+        assert mock_sleep.call_count == 3
+        # Jitter: every backoff is positive and none are identical zero-jitter
+        delays = [c.args[0] for c in mock_sleep.call_args_list]
+        assert all(d > 0 for d in delays)
+
+    def test_retries_are_bounded(self, dynamodb_client):
+        def always_fail(**kwargs):
+            raise ClientError(
+                {"Error": {"Code": "ConditionalCheckFailedException"}}, "PutItem"
+            )
+
+        from src.lib.timeseries.fanout import FanoutWriteError
+
+        with (
+            patch.object(dynamodb_client, "put_item", always_fail),
+            patch("src.lib.timeseries.fanout.time.sleep"),
+        ):
+            with pytest.raises(FanoutWriteError) as excinfo:
+                accumulate_fanout(dynamodb_client, TABLE, make_score(0.8, "positive"))
+        assert excinfo.value.error_class == "ConditionalCheckFailedException"
+
+    def test_jitter_randomized(self, dynamodb_client):
+        """Backoff consults the RNG so concurrent losers do not retry in
+        lockstep."""
+        failures = {"n": 0}
+        original = dynamodb_client.put_item
+
+        def flaky_put(**kwargs):
+            if failures["n"] < 1:
+                failures["n"] += 1
+                raise ClientError(
+                    {"Error": {"Code": "ConditionalCheckFailedException"}},
+                    "PutItem",
+                )
+            return original(**kwargs)
+
+        with (
+            patch.object(dynamodb_client, "put_item", flaky_put),
+            patch("src.lib.timeseries.fanout.time.sleep"),
+            patch(
+                "src.lib.timeseries.fanout.random.uniform",
+                wraps=random.uniform,
+            ) as mock_uniform,
+        ):
+            accumulate_fanout(dynamodb_client, TABLE, make_score(0.8, "positive"))
+
+        assert mock_uniform.called
+
+    def test_non_conditional_error_raises_immediately(self, dynamodb_client):
+        def broken_put(**kwargs):
+            raise ClientError(
+                {"Error": {"Code": "ProvisionedThroughputExceededException"}},
+                "PutItem",
+            )
+
+        from src.lib.timeseries.fanout import FanoutWriteError
+
+        with (
+            patch.object(dynamodb_client, "put_item", broken_put),
+            patch("src.lib.timeseries.fanout.time.sleep") as mock_sleep,
+        ):
+            with pytest.raises(FanoutWriteError) as excinfo:
+                accumulate_fanout(dynamodb_client, TABLE, make_score(0.8, "positive"))
+        assert mock_sleep.call_count == 0
+        assert excinfo.value.error_class == "ProvisionedThroughputExceededException"
 
 
-class TestFanoutMetricEmission:
-    """Verify SilentFailure/Count and ConditionalCheck/Count metrics."""
+class TestValidation:
+    def test_ticker_required(self, dynamodb_client):
+        score = SentimentScore(
+            value=0.8, label="positive", timestamp=parse_iso("2025-12-21T10:35:47Z")
+        )
+        with pytest.raises(ValueError):
+            accumulate_fanout(dynamodb_client, TABLE, score)
 
-    SAMPLE_SCORE = SentimentScore(
-        ticker="AAPL",
-        value=0.75,
-        source="tiingo",
-        timestamp=datetime(2024, 1, 2, 10, 30, 0, tzinfo=UTC),
-        label="positive",
+
+class TestLabelToSigned:
+    """Signed mapping contract (research D2): one source of truth for handler,
+    backfill, and the test oracle."""
+
+    def test_positive_maps_to_plus_confidence(self):
+        from src.lib.timeseries.signed import label_to_signed
+
+        assert label_to_signed("positive", 0.92) == 0.92
+
+    def test_negative_maps_to_minus_confidence(self):
+        from src.lib.timeseries.signed import label_to_signed
+
+        assert label_to_signed("negative", 0.78) == -0.78
+
+    def test_neutral_maps_to_zero(self):
+        from src.lib.timeseries.signed import label_to_signed
+
+        assert label_to_signed("neutral", 0.55) == 0.0
+
+    def test_unknown_label_maps_to_zero(self):
+        from src.lib.timeseries.signed import label_to_signed
+
+        assert label_to_signed("mixed", 0.9) == 0.0
+
+    @pytest.mark.parametrize(
+        ("label", "confidence"),
+        [("positive", 1.0), ("negative", 1.0), ("positive", 0.0), ("neutral", 1.0)],
     )
+    def test_output_bounded(self, label, confidence):
+        from src.lib.timeseries.signed import label_to_signed
 
-    def _client_error(self, code="InternalServerError"):
-        return ClientError(
-            error_response={"Error": {"Code": code, "Message": "test"}},
-            operation_name="TestOp",
-        )
-
-    @patch("src.lib.timeseries.fanout.emit_metric")
-    @patch("src.lib.timeseries.fanout.tracer")
-    def test_batch_write_emits_silent_failure(self, mock_tracer, mock_emit):
-        mock_dynamodb = MagicMock()
-        mock_dynamodb.batch_write_item.side_effect = self._client_error()
-        mock_tracer.provider.in_subsegment.return_value.__enter__ = MagicMock()
-        mock_tracer.provider.in_subsegment.return_value.__exit__ = MagicMock(
-            return_value=False
-        )
-        with pytest.raises(ClientError):
-            write_fanout(mock_dynamodb, "t", self.SAMPLE_SCORE)
-        mock_emit.assert_called_once_with(
-            name="SilentFailure/Count",
-            value=1,
-            unit="Count",
-            dimensions={"FailurePath": "fanout_batch_write"},
-            namespace="SentimentAnalyzer/Reliability",
-        )
-
-    @patch("src.lib.timeseries.fanout.emit_metric")
-    @patch("src.lib.timeseries.fanout.tracer")
-    def test_base_update_emits_silent_failure(self, mock_tracer, mock_emit):
-        mock_dynamodb = MagicMock()
-        mock_dynamodb.update_item.side_effect = self._client_error()
-        mock_tracer.provider.in_subsegment.return_value.__enter__ = MagicMock()
-        mock_tracer.provider.in_subsegment.return_value.__exit__ = MagicMock(
-            return_value=False
-        )
-        with pytest.raises(ClientError):
-            write_fanout_with_update(mock_dynamodb, "t", self.SAMPLE_SCORE)
-        mock_emit.assert_called_once_with(
-            name="SilentFailure/Count",
-            value=1,
-            unit="Count",
-            dimensions={"FailurePath": "fanout_base_update"},
-            namespace="SentimentAnalyzer/Reliability",
-        )
-
-    @patch("src.lib.timeseries.fanout.emit_metric")
-    @patch("src.lib.timeseries.fanout.tracer")
-    def test_label_update_emits_silent_failure(self, mock_tracer, mock_emit):
-        mock_dynamodb = MagicMock()
-        mock_dynamodb.update_item.side_effect = [None, self._client_error()]
-        mock_tracer.provider.in_subsegment.return_value.__enter__ = MagicMock()
-        mock_tracer.provider.in_subsegment.return_value.__exit__ = MagicMock(
-            return_value=False
-        )
-        with pytest.raises(ClientError):
-            write_fanout_with_update(mock_dynamodb, "t", self.SAMPLE_SCORE)
-        mock_emit.assert_called_once_with(
-            name="SilentFailure/Count",
-            value=1,
-            unit="Count",
-            dimensions={"FailurePath": "fanout_label_update"},
-            namespace="SentimentAnalyzer/Reliability",
-        )
-
-    @patch("src.lib.timeseries.fanout.emit_metric")
-    @patch("src.lib.timeseries.fanout.tracer")
-    def test_conditional_emits_contention_metric(self, mock_tracer, mock_emit):
-        mock_dynamodb = MagicMock()
-        cond_err = self._client_error("ConditionalCheckFailedException")
-        # write_fanout_with_update loops over 6 resolutions.
-        # Each resolution: base_update, label_update, cond_high, cond_low = 4 calls.
-        # We want all to succeed except conditional checks.
-        # 6 resolutions * 4 calls = 24 calls. Simplify: use side_effect function.
-        call_count = [0]
-
-        def update_side_effect(**kwargs):
-            call_count[0] += 1
-            cond_expr = kwargs.get("ConditionExpression", "")
-            if "#high <" in cond_expr or "#low >" in cond_expr:
-                raise cond_err
-            return {}
-
-        mock_dynamodb.update_item.side_effect = update_side_effect
-        write_fanout_with_update(mock_dynamodb, "t", self.SAMPLE_SCORE)
-        calls = [
-            c
-            for c in mock_emit.call_args_list
-            if c[1].get("name") == "ConditionalCheck/Count"
-        ]
-        # 6 resolutions * 2 conditional checks (high + low) = 12
-        assert len(calls) == 12
-
-    @patch("src.lib.timeseries.fanout.emit_metric")
-    @patch("src.lib.timeseries.fanout.tracer")
-    def test_conditional_unexpected_emits_silent_failure(self, mock_tracer, mock_emit):
-        mock_dynamodb = MagicMock()
-        mock_dynamodb.update_item.side_effect = [
-            None,
-            None,
-            self._client_error("ThrottlingException"),
-        ]
-        mock_tracer.provider.in_subsegment.return_value.__enter__ = MagicMock()
-        mock_tracer.provider.in_subsegment.return_value.__exit__ = MagicMock(
-            return_value=False
-        )
-        with pytest.raises(ClientError):
-            write_fanout_with_update(mock_dynamodb, "t", self.SAMPLE_SCORE)
-        mock_emit.assert_called_once_with(
-            name="SilentFailure/Count",
-            value=1,
-            unit="Count",
-            dimensions={"FailurePath": "fanout_conditional_unexpected"},
-            namespace="SentimentAnalyzer/Reliability",
-        )
-
-    @patch("src.lib.timeseries.fanout.emit_metric", side_effect=Exception("CW down"))
-    @patch("src.lib.timeseries.fanout.tracer")
-    def test_metric_failure_does_not_propagate(self, mock_tracer, mock_emit):
-        mock_dynamodb = MagicMock()
-        mock_dynamodb.batch_write_item.side_effect = self._client_error()
-        mock_tracer.provider.in_subsegment.return_value.__enter__ = MagicMock()
-        mock_tracer.provider.in_subsegment.return_value.__exit__ = MagicMock(
-            return_value=False
-        )
-        with pytest.raises(ClientError):
-            write_fanout(mock_dynamodb, "t", self.SAMPLE_SCORE)
+        assert -1.0 <= label_to_signed(label, confidence) <= 1.0
