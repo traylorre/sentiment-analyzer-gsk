@@ -29,7 +29,7 @@ pytest-asyncio==1.4.0  # Async test support for SSE endpoints
 moto[all]==5.2.2
 
 # HTTP Mocking - For NewsAPI adapter tests
-responses==0.26.2
+responses==0.26.3
 
 # Code Quality
 ruff==0.15.14             # Fast linter (replaces flake8, isort)
