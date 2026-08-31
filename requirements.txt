@@ -17,15 +17,15 @@ botocore==1.43.82
 # ML/NLP - DistilBERT sentiment analysis
 # torch is not pinned here: it enters through the analysis container image
 # (src/lambdas/analysis/requirements.txt, CPU-only wheels), never from this file.
-transformers==5.14.1
+transformers==5.16.1
 
 
 # HTTP Client - Financial API adapters (Tiingo, Finnhub)
 httpx==0.28.1  # Async HTTP client for financial APIs
 
 # Data Validation - Input/output schemas
-pydantic==2.13.4  # pinned: moto[all]==5.1.22 requires <=2.12.4; deploy.yml Lambda packaging also pins 2.12.4
-orjson==3.11.9  # Fast JSON serialization for API responses
+pydantic==2.13.5  # pinned: moto[all]==5.1.22 requires <=2.12.4; deploy.yml Lambda packaging also pins 2.12.4
+orjson==3.12.0  # Fast JSON serialization for API responses
 email-validator==2.3.0  # Required for Pydantic EmailStr type
 
 # AWS X-Ray - Distributed tracing (Feature 006)
@@ -35,7 +35,7 @@ aws-xray-sdk==2.15.0
 sendgrid==6.12.5
 
 # AWS Lambda Powertools - Enhanced observability
-aws-lambda-powertools==3.31.1
+aws-lambda-powertools==3.34.0
 
 # JWT Authentication - Feature 075 (validation gaps)
 PyJWT==2.13.0
