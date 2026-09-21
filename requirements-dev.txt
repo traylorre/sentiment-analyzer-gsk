@@ -38,7 +38,7 @@ semgrep==1.177.0        # Comprehensive SAST (make sast gate)
 
 # Type Checking (optional but recommended)
 mypy==1.19.1
-boto3-stubs==1.43.92     # Type stubs for boto3
+boto3-stubs==1.43.97     # Type stubs for boto3
 
 # Testing Utilities
 httpx==0.28.1           # Async HTTP client for financial API adapters

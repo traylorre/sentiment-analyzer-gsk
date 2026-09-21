@@ -35,7 +35,7 @@ aws-xray-sdk==2.15.0
 sendgrid==6.12.5
 
 # AWS Lambda Powertools - Enhanced observability
-aws-lambda-powertools==3.34.0
+aws-lambda-powertools==3.35.0
 
 # =============================================================================
 # Testing Dependencies (from requirements-dev.txt)
@@ -58,7 +58,7 @@ pre-commit==4.6.2
 
 # Type Checking
 mypy==1.19.1
-boto3-stubs==1.43.92
+boto3-stubs==1.43.97
 
 # Testing Utilities
 freezegun==1.5.5
