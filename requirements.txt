@@ -35,7 +35,7 @@ aws-xray-sdk==2.15.0
 sendgrid==6.12.5
 
 # AWS Lambda Powertools - Enhanced observability
-aws-lambda-powertools==3.34.0
+aws-lambda-powertools==3.35.0
 
 # JWT Authentication - Feature 075 (validation gaps)
 PyJWT==2.14.0
