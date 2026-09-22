@@ -1,0 +1,51 @@
+diff --git a/.github/workflows/nightly-e2e.yml b/.github/workflows/nightly-e2e.yml
+index 91ac70f0..a35ea05f 100644
+--- a/.github/workflows/nightly-e2e.yml
++++ b/.github/workflows/nightly-e2e.yml
+@@ -64,7 +64,7 @@ jobs:
+             --grep "@external-api" \
+             --project="Desktop Chrome" \
+             --workers=1 \
+-            --retries=1 \
++            --retries=0 \
+             --reporter=html,list
+         env:
+           CI: 'true'
+diff --git a/frontend/playwright.config.ts b/frontend/playwright.config.ts
+index 2782b07a..7d438f7d 100644
+--- a/frontend/playwright.config.ts
++++ b/frontend/playwright.config.ts
+@@ -11,7 +11,7 @@ export default defineConfig({
+   globalSetup: './tests/e2e/global-setup.ts',
+   fullyParallel: true,
+   forbidOnly: !!process.env.CI,
+-  retries: process.env.CI ? 2 : 0,
++  retries: 0,
+   workers: 4,
+   reporter: 'html',
+   use: {
+diff --git a/frontend/tests/e2e/sentiment-visibility.spec.ts b/frontend/tests/e2e/sentiment-visibility.spec.ts
+index ec4a4ae7..09ac9ec4 100644
+--- a/frontend/tests/e2e/sentiment-visibility.spec.ts
++++ b/frontend/tests/e2e/sentiment-visibility.spec.ts
+@@ -15,7 +15,7 @@ test.describe('Sentiment Data Visibility', { tag: '@external-api' }, () => {
+     await searchInput.clear();
+     await searchInput.fill(ticker);
+ 
+-    // Handle 429 rate limiting on search endpoint
++    // Retry within the test on 429. Exhausting the retries is a break, not a skip.
+     let retries = 0;
+     const maxRetries = 3;
+     let rateLimited = false;
+@@ -38,7 +38,10 @@ test.describe('Sentiment Data Visibility', { tag: '@external-api' }, () => {
+           retries++;
+           rateLimited = false;
+           if (retries >= maxRetries) {
+-            test.skip(true, `Rate limited (429) after ${maxRetries} retries on search endpoint`);
++            throw new Error(
++              `Suggestion for ${ticker} did not appear: search endpoint returned 429 ` +
++                `after ${maxRetries} retries`
++            );
+           }
+           await page.waitForTimeout(2000);
+           await searchInput.clear();

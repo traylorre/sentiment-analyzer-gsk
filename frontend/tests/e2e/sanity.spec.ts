@@ -24,7 +24,7 @@ test.describe('Critical User Path - Sanity Tests', { tag: '@external-api' }, () 
       await searchInput.fill('AAPL');
 
       // The expect below will wait up to 10s for debounce + API response
-      const suggestion = page.getByRole('option', { name: /AAPL/i });
+      const suggestion = page.locator('[role="option"]#ticker-option-AAPL');
       await expect(suggestion).toBeVisible({ timeout: 10000 });
       await suggestion.click();
 
@@ -74,7 +74,7 @@ test.describe('Critical User Path - Sanity Tests', { tag: '@external-api' }, () 
       await searchInput.fill('AAPL');
       // Wait implicitly via the expect timeout below
 
-      const suggestion = page.getByRole('option', { name: /AAPL/i });
+      const suggestion = page.locator('[role="option"]#ticker-option-AAPL');
       await expect(suggestion).toBeVisible({ timeout: 10000 });
       await suggestion.click();
 
@@ -103,7 +103,7 @@ test.describe('Critical User Path - Sanity Tests', { tag: '@external-api' }, () 
       await searchInput.fill('AAPL');
       // Wait implicitly via the expect timeout below
 
-      const suggestion = page.getByRole('option', { name: /AAPL/i });
+      const suggestion = page.locator('[role="option"]#ticker-option-AAPL');
       await expect(suggestion).toBeVisible({ timeout: 10000 });
       await suggestion.click();
 
@@ -144,7 +144,7 @@ test.describe('Critical User Path - Sanity Tests', { tag: '@external-api' }, () 
       await searchInput.fill('AAPL');
       // Wait implicitly via the expect timeout below
 
-      const suggestion = page.getByRole('option', { name: /AAPL/i });
+      const suggestion = page.locator('[role="option"]#ticker-option-AAPL');
       await expect(suggestion).toBeVisible({ timeout: 10000 });
       await suggestion.click();
 
@@ -200,7 +200,7 @@ test.describe('Critical User Path - Sanity Tests', { tag: '@external-api' }, () 
       // The expect below will wait for debounce + API response
 
       // Step 2: Click to select AAPL from suggestions
-      const suggestion = page.getByRole('option', { name: /AAPL/i });
+      const suggestion = page.locator('[role="option"]#ticker-option-AAPL');
       await expect(suggestion).toBeVisible({ timeout: 10000 });
       await suggestion.click();
 
@@ -242,7 +242,7 @@ test.describe('Critical User Path - Sanity Tests', { tag: '@external-api' }, () 
       await searchInput.fill('AAPL');
       // Wait implicitly via the expect timeout below
 
-      const suggestion = page.getByRole('option', { name: /AAPL/i });
+      const suggestion = page.locator('[role="option"]#ticker-option-AAPL');
       await expect(suggestion).toBeVisible({ timeout: 10000 });
       await suggestion.click();
 
@@ -287,7 +287,7 @@ test.describe('Critical User Path - Sanity Tests', { tag: '@external-api' }, () 
       await searchInput.fill('AAPL');
       // Wait implicitly via the expect timeout below
 
-      const suggestion = page.getByRole('option', { name: /AAPL/i });
+      const suggestion = page.locator('[role="option"]#ticker-option-AAPL');
       await expect(suggestion).toBeVisible({ timeout: 10000 });
       await suggestion.click();
 
@@ -344,7 +344,7 @@ test.describe('Critical User Path - Sanity Tests', { tag: '@external-api' }, () 
       await expect(searchInput).toBeVisible();
       await searchInput.fill('GOOG');
       // Wait implicitly via the expect timeout below (first match to avoid GOOGL)
-      const suggestion = page.getByRole('option', { name: /GOOG.*Alphabet.*Class C/i });
+      const suggestion = page.locator('[role="option"]#ticker-option-GOOG');
       await expect(suggestion).toBeVisible({ timeout: 10000 });
       await suggestion.click();
 
@@ -390,7 +390,7 @@ test.describe('Critical User Path - Sanity Tests', { tag: '@external-api' }, () 
       const searchInput = page.getByPlaceholder(/search tickers/i);
       await searchInput.fill('GOOG');
       // Wait implicitly via the expect timeout below (first match to avoid GOOGL)
-      const suggestion = page.getByRole('option', { name: /GOOG.*Alphabet.*Class C/i });
+      const suggestion = page.locator('[role="option"]#ticker-option-GOOG');
       await expect(suggestion).toBeVisible({ timeout: 10000 });
       await suggestion.click();
 
@@ -441,7 +441,7 @@ test.describe('Critical User Path - Sanity Tests', { tag: '@external-api' }, () 
       await searchInput.fill('GOOG');
       // Wait implicitly via the expect timeout below
 
-      const suggestion = page.getByRole('option', { name: /GOOG.*Alphabet.*Class C/i });
+      const suggestion = page.locator('[role="option"]#ticker-option-GOOG');
       await expect(suggestion).toBeVisible({ timeout: 10000 });
       await suggestion.click();
 
@@ -514,7 +514,7 @@ test.describe('Critical User Path - Sanity Tests', { tag: '@external-api' }, () 
       await searchInput.fill('GOOG');
       // Wait implicitly via the expect timeout below
 
-      const googSuggestion = page.getByRole('option', { name: /GOOG.*Alphabet.*Class C/i });
+      const googSuggestion = page.locator('[role="option"]#ticker-option-GOOG');
       await expect(googSuggestion).toBeVisible({ timeout: 10000 });
       await googSuggestion.click();
 
@@ -547,7 +547,7 @@ test.describe('Critical User Path - Sanity Tests', { tag: '@external-api' }, () 
       await searchInput.fill('AAPL');
       // Wait implicitly via the expect timeout below
 
-      const aaplSuggestion = page.getByRole('option', { name: /AAPL/i });
+      const aaplSuggestion = page.locator('[role="option"]#ticker-option-AAPL');
       await expect(aaplSuggestion).toBeVisible({ timeout: 10000 });
       await aaplSuggestion.click();
 
@@ -590,7 +590,7 @@ test.describe('Critical User Path - Sanity Tests', { tag: '@external-api' }, () 
       await searchInput.fill('GOOG');
       // Wait implicitly via the expect timeout below
 
-      const suggestion = page.getByRole('option', { name: /GOOG.*Alphabet.*Class C/i });
+      const suggestion = page.locator('[role="option"]#ticker-option-GOOG');
       await expect(suggestion).toBeVisible({ timeout: 10000 });
       await suggestion.click();
 
@@ -659,7 +659,7 @@ test.describe('Critical User Path - Sanity Tests', { tag: '@external-api' }, () 
       await searchInput.fill('AAPL');
       // Wait implicitly via the expect timeout below
 
-      const suggestion = page.getByRole('option', { name: /AAPL/i });
+      const suggestion = page.locator('[role="option"]#ticker-option-AAPL');
       await expect(suggestion).toBeVisible({ timeout: 10000 });
       await suggestion.click();
 
@@ -688,7 +688,7 @@ test.describe('Critical User Path - Sanity Tests', { tag: '@external-api' }, () 
       await searchInput.fill('AAPL');
       // Wait implicitly via the expect timeout below
 
-      const suggestion = page.getByRole('option', { name: /AAPL/i });
+      const suggestion = page.locator('[role="option"]#ticker-option-AAPL');
       await expect(suggestion).toBeVisible({ timeout: 10000 });
       await suggestion.click();
 
@@ -734,7 +734,7 @@ test.describe('Critical User Path - Sanity Tests', { tag: '@external-api' }, () 
       await searchInput.focus();
       await searchInput.fill('AAPL');
       // Wait implicitly via the expect timeout below
-      const suggestion = page.getByRole('option', { name: /AAPL/i });
+      const suggestion = page.locator('[role="option"]#ticker-option-AAPL');
       await expect(suggestion).toBeVisible({ timeout: 10000 });
 
       // Use keyboard to select
