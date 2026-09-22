@@ -103,6 +103,14 @@ Python work needs the venv, which is 3.13 while system Python is not:
   version at `src/lambdas/shared/utils/dedup.py:11` also hashes source and is **not** on the live
   path, despite living under `shared/` with the fuller docstring. Reading either file alone gives
   you the wrong answer.
+- **A red `test-preprod` is the deploy gate working, until proven otherwise.** Before 2026-09-22 that
+  job could not fail: all 16 sanity tests skipped, the exit code captured was `tee`'s, the computed
+  result was never read, and `deploy.yml` ended in an unconditional `exit 0`. Card 8 closed all four
+  layers, and those 16 tests have still never once executed against preprod. So the first failure
+  they produce is most likely the gate reporting something that was always true and previously
+  hidden, not a regression the change introduced. **Diagnose the reported failure before reverting
+  the gate.** Reverting restores a job that certifies every deploy green, which is the state a real
+  bug (missing OAuth buttons) already shipped through.
 
 ## Active Technologies
 
