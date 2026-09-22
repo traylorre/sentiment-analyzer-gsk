@@ -1,0 +1,25 @@
+{
+  "id": "8",
+  "subject": "the preprod deploy gate cannot fail: four layers each make it advisory, and a real bug already shipped through it",
+  "activeForm": "Making the preprod deploy gate able to fail",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": [],
+  "runConfiguration": {
+    "work_items": [
+      "Re-verify D1's four advisory layers and make the preprod deploy gate able to fail",
+      "Fix D2's retry-helper defects before applying stash-A",
+      "Drop force:true at dialog-dismissal.spec.ts:168 for D3"
+    ],
+    "backwards_compatibility": "none",
+    "security_tier": "S2",
+    "operational_rigour": "full",
+    "audience": [
+      "maintainer"
+    ],
+    "allow_git_log": false,
+    "md_is_canonical": true
+  },
+  "specNumber": "001-constitution-prune",
+  "description": "STATUS. Stowed 2026-08-01, deliberately parked and neither abandoned nor superseded. Entry point specs/001-constitution-prune/STOW-POINT.md; that file plus its sibling reviews/ directory (refutation-results.md, phase0.json, cross-reference-map.md, consumer-profile.md, carded-out-of-scope.md) is the complete record. The battleplan itself is specs/001-constitution-prune/BATTLEPLAN-tier1-refute.md, which refuted the five Tier 1 docs.\n\nWHY THIS OUTRANKS EVERY OTHER CARD. D1 silently passes broken deploys, and it is independent of the signed-fanout branch (they share no files).\n\nTHE THREE DIAGNOSED, UNFIXED DEFECTS.\n- D1: the preprod deploy gate cannot fail. Four independent layers each make it advisory: all 16 sanity tests skip; the exit code captured is tee's; the computed result is never read; and there is an unconditional exit 0 at deploy.yml:1695. A real bug (missing OAuth buttons) already shipped through it. Separately, the 22 @external-api tests run in ZERO CI contexts because TIINGO_API_KEY and FINNHUB_API_KEY secrets were never created.\n- D2: the sentiment-visibility.spec.ts retry helper edit is broken. Listener registered after the request fires, plus strict-mode masking, a listener leak, and an off-by-one.\n- D3: dialog-dismissal flake root-caused to a Radix listener-registration race triggered by force: true; the fix is dropping force at dialog-dismissal.spec.ts:168. Open GitHub issue #950. Do NOT attempt to reproduce: 134 executions never reproduced it.\n\nWHAT CHANGED SINCE THE STOW, READ BEFORE ACTING.\n1. The stow's working-tree changes are NO LONGER in the tree and NOT in git stash. They were exported to patch files on 2026-08-04: specs/stash-triage/stash-A-e2e-retries-falsepass.patch (the retries edits plus the BROKEN sentiment-visibility helper; fix D2 before or while applying) and specs/stash-triage/stash-B-battleplanB-doc-audit.patch (the doc amendments, 331KB).\n2. The repo moved a lot since 2026-08-01 (PRs roughly #1016 through #1050). Every file:line in STOW-POINT.md and in the patches must be re-verified before use; expect the patches to need rebasing.\n3. The CloudWatch alarm deletion (2026-08-06, PR #1035) strengthens STOW-POINT's standing owner decision that alarms are unwanted. F3 (OBSERVABILITY.md) findings about alarm truth need re-reading against the post-deletion doc, which was rewritten with an Alarms register at deletion time. See card 7.\n\nEXACT NEXT STEPS.\n1. Read STOW-POINT.md fully, then reviews/refutation-results.md.\n2. Re-verify D1's four layers against the current .github/workflows/deploy.yml; the line numbers will have drifted.\n3. Apply or rebase the stash patches only AFTER fixing D2's defects, and run the doc-audit patch (stash-B) through a fresh refuter pass since the docs it amends have changed.\n4. Open questions at the end of BATTLEPLAN-tier1-refute.md still stand: the SECURITY.md lens, diagrams TEMPLATE.md, and whether injected-docs-check.sh gates.\n\nREGENERATE THE DEFECT CENSUS rather than trusting this list: the four D1 layers were measured against deploy.yml as of 2026-08-01 and this card states them as of that commit."
+}

@@ -1,0 +1,25 @@
+{
+  "id": "4",
+  "subject": "email digest sentiment has never worked: every query throws, the fallback hardcodes neutral",
+  "activeForm": "Repointing the digest at keys that exist",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": [
+    "1"
+  ],
+  "runConfiguration": {
+    "work_items": [
+      "email digest sentiment has never worked: every query throws, the fallback hardcodes neutral"
+    ],
+    "backwards_compatibility": null,
+    "security_tier": null,
+    "operational_rigour": null,
+    "audience": [
+      "maintainer"
+    ],
+    "allow_git_log": false,
+    "md_is_canonical": true
+  },
+  "specNumber": "001-digest-never-worked",
+  "description": "Status: CARDED, not started. Found by AR#1 refuter during the signed-fanout\nbattleplan (2026-08-05), verified with file:line evidence in that run's\nreviews/ar1.json (ar1-003) and refuter handoff records.\n\n## Symptom\n\nDigest emails label every ticker 0.0/neutral regardless of actual sentiment.\n\n## Mechanism (two independent layers, either alone is fatal)\n\n1. DigestService is handed the main sentiment-items table\n   (src/lambdas/notification/handler.py:43,249; terraform main.tf:333), which is\n   keyed source_id/timestamp (modules/dynamodb/main.tf:7-8), but queries\n   Key('PK').eq('TICKER#<ticker>') (digest_service.py:305-311). Every query raises\n   ValidationException and execution lands in the exception fallback that hardcodes\n   score 0.0 / neutral (digest_service.py:362-378).\n2. Even a working query would read item.get('sentiment_score', 0) \u2014 a field no live\n   writer stores (analysis writes sentiment/score/model_version/status,\n   analysis/handler.py:326-329). The only writer of sentiment_score+TICKER# shapes\n   is dead code (shared/models/sentiment_result.py, no live importer).\n\n## Notes for pickup\n\n- Orthogonal to the signed-fanout feature; explicitly out of its scope (FR-008).\n- Fix options: point the digest at timeseries daily buckets (signed after\n  signed-fanout ships, correct PK format '{ticker}#24h'), or query items by their\n  real keys/GSI and derive signed values from label+score. Bucket route is less\n  code and inherits aggregation.\n- The digest's \u00b10.33 labeling thresholds are already signed-ready\n  (digest_service.py:346-351).\n- Check whether digest emails currently ship to anyone before prioritizing."
+}

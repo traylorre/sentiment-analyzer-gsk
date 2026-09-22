@@ -1,0 +1,29 @@
+{
+  "id": "1",
+  "subject": "signed-fanout: land PR #1032, then run the backfill on separate per-environment operator go",
+  "activeForm": "Landing the signed accumulating fanout and its backfill",
+  "status": "pending",
+  "blocks": [
+    "2",
+    "4",
+    "5"
+  ],
+  "blockedBy": [],
+  "runConfiguration": {
+    "work_items": [
+      "Merge PR #1032",
+      "Admin bootstrap apply for the backfill IAM role",
+      "Backfill per environment on separate operator go"
+    ],
+    "backwards_compatibility": null,
+    "security_tier": null,
+    "operational_rigour": null,
+    "audience": [
+      "maintainer"
+    ],
+    "allow_git_log": false,
+    "md_is_canonical": true
+  },
+  "specNumber": "001-signed-fanout",
+  "description": "WHAT SHIPPED. Branch 001-signed-fanout carries the implementation: fdedbc88 (signed accumulating fanout with backfill and IAM) and 8314b87c (AWS_DEFAULT_REGION for bare boto3 clients in CI). PR #1032 is OPEN, not draft, 4 commits, checks 13 SUCCESS / 2 SKIPPED. Planning artifacts and the AR#1/AR#2/AR#3 review trail are on the branch under specs/001-signed-fanout/. Correction to any inherited brief: PI-RESUME-signed-fanout.md described this as BLOCKED ON OPERATOR GO with 0 code lines written; the go was given and the code landed on the branch after that brief was written.\n\nTHE DEFECT IT FIXES. The dashboard sentiment line pinned near +1.0 because fanout stored UNSIGNED model confidence and each article OVERWROTE its bucket wholesale (count==1 in 7,843/7,843 live items, full preprod scan 2026-08-05). The read side was already signed (thresholds +/-0.33, axes -1..1).\n\nDESIGN DECISIONS (research.md D1-D9, all adversarially reviewed).\n- D1: optimistic concurrency, read-compute-conditional-put on `version`, single atomic write, with an explicit attribute_not_exists(version) branch covering absent AND legacy pre-cutover buckets (AR#2 fix, refuter-refined to two branches).\n- D3: timestamps outside [now-30d, now+5min] are REJECTED for fanout; the item is still stored.\n- D5: quiescence for backfill = disable the EventBridge ingestion rule, 240s invocation silence PLUS trailing Throttles (6h) and Errors (30m) zero-windows (AR#2 amendment), backfill, re-enable.\n- D7: write_fanout and write_fanout_with_update are deleted; accumulate_fanout() is the only writer. The src/lib/timeseries/__init__.py edit is mandatory because SSE imports the package at cold start; the 'SSE does not import timeseries fanout' rationale was FALSE (AR#2). T010/T011/T012 had to land as one change or SSE cold start breaks.\n- D8: bucket sources = provider-name string set from the SNS 'sources' field.\n- Backfill only for windows inside 30d retention with TTL still future; legacy buckets untouched.\n\nWHAT REMAINS.\n1. Merge PR #1032 (squash) on operator authorization.\n2. Admin bootstrap apply for the CI policy extension (ar3-002): the CI deploy user cannot create the backfill IAM role, so the operator runs the bootstrap apply BEFORE the US3 terraform deploy.\n3. Backfill execution, per environment, on separate explicit operator go (spec A5).\n4. Fold the CLAUDE.md Active Technologies append into docs/ACTIVE-TECHNOLOGIES.md.\n\nOPEN QUESTIONS CARRIED FROM THE tasks.md GATE.\n- CloudTrail data events accept/decline (FR-004): owner decision at ship.\n- Legacy-bucket deletion for chart honesty (spec A3): deferred owner call.\n- Dormant ingestion-grant drop, framed as the enforcement half of the version mechanism (ar2-010).\n- Live-path double-count residual for partially completed retries; detection via SC-003 spot recompute. Raise as its own card if it survives the merge.\n\nCI-MIRROR TEST COMMAND (venv active, python 3.13, expect ~4907 passed):\nAWS_REGION=us-east-1 AWS_ACCESS_KEY_ID=testing AWS_SECRET_ACCESS_KEY=testing pytest --ignore=tests/integration/test_analysis_preprod.py --ignore=tests/integration/test_dashboard_preprod.py --ignore=tests/integration/test_canary_preprod.py --ignore=tests/integration/test_ingestion_preprod.py --ignore=tests/integration/test_e2e_lambda_invocation_preprod.py --ignore=tests/integration/test_observability_preprod.py --ignore=tests/integration/timeseries --ignore=tests/e2e -q"
+}

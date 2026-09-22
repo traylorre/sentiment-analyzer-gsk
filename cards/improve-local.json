@@ -1,0 +1,7 @@
+{
+  "id": "improve-local",
+  "subject": "improve-local: inbox and factoring pass for this repo's session-governing rules",
+  "status": "pending",
+  "description": "The dump target for instructions that governed a session in this repo and exist in no committed file (the improve-local role, created by name -- no allocator anywhere; card 166 in ~/dotfiles is the record). Contributors append via improve-drop.sh local; this repo's Helios batch-incorporates with improve-collect.py local. A candidate becomes a committed line only when it passes the five gates of ~/dotfiles/cards/133.json: recurrence, durability, mechanism first, payment, placement. Dumping is free; factoring is the work.",
+  "candidates": []
+}
