@@ -1655,13 +1655,19 @@ jobs:
         env:
           # Use Amplify URL for frontend E2E tests (Feature 1205)
           PREPROD_FRONTEND_URL: ${{ needs.deploy-preprod.outputs.amplify_url }}
+          # Spec 1401 L1: the data-API guard probes THIS base, not 127.0.0.1:8000.
+          # Without it the guard probes a local server that does not exist in the
+          # remote context and all 16 sanity tests skip green.
+          PREPROD_API_URL: ${{ needs.deploy-preprod.outputs.api_url }}
         run: |
           echo "Running Playwright E2E tests (sanity + auth) against preprod frontend..."
           echo "Frontend URL: ${PREPROD_FRONTEND_URL}"
+          echo "API URL: ${PREPROD_API_URL}"
 
           if [ -z "$PREPROD_FRONTEND_URL" ]; then
-            echo "WARNING: Amplify URL not available - skipping Playwright tests"
+            echo "::error::Amplify URL not available - Playwright gate could not run"
             echo "skipped=true" >> $GITHUB_OUTPUT
+            echo "reason=no-frontend-url" >> $GITHUB_OUTPUT
             exit 0
           fi
 
@@ -1674,7 +1680,13 @@ jobs:
             --project="Desktop Chrome" \
             --reporter=list \
             2>&1 | tee playwright-output.txt
-          PLAYWRIGHT_EXIT_CODE=$?
+          # Spec 1401 L2: ${PIPESTATUS[0]} is `timeout`'s status, NOT `tee`'s.
+          # This step's shell is bash -e with no pipefail (the job has no defaults:
+          # block and the workflow has no top-level one), so plain $? here reads tee,
+          # which succeeds whenever it can write its file. That made this variable
+          # always 0, made the 124 branch below unreachable, and wrote passed=true
+          # unconditionally. Do not replace this with $?.
+          PLAYWRIGHT_EXIT_CODE=${PIPESTATUS[0]}
           set -e
 
           if [ $PLAYWRIGHT_EXIT_CODE -eq 0 ]; then
@@ -1683,14 +1695,17 @@ jobs:
           elif [ $PLAYWRIGHT_EXIT_CODE -eq 124 ]; then
             echo "passed=false" >> $GITHUB_OUTPUT
             echo "reason=timeout" >> $GITHUB_OUTPUT
-            echo "WARNING: Playwright tests timed out (5 min limit)"
+            echo "::error::Playwright tests timed out (5 min limit)"
           else
             echo "passed=false" >> $GITHUB_OUTPUT
             echo "reason=failed" >> $GITHUB_OUTPUT
-            echo "WARNING: Playwright sanity tests failed with exit code $PLAYWRIGHT_EXIT_CODE"
+            echo "::error::Playwright sanity tests failed with exit code $PLAYWRIGHT_EXIT_CODE"
           fi
 
-          # Always exit 0 to allow workflow to continue (sanity tests are non-blocking for now)
+          # Spec 1401 L4: this exit 0 is NOT the gate being advisory. It mirrors
+          # `Run Integration Tests` above: the step exits 0 so the artifact upload
+          # runs, and `Check Playwright Sanity Results` below reads the recorded
+          # outcome and fails the job. Deleting that step reopens the gate.
           exit 0
 
       - name: Upload Playwright Test Results
@@ -1704,8 +1719,37 @@ jobs:
           retention-days: 30
           if-no-files-found: ignore
 
+      # Spec 1401 L3: before this step, steps.playwright-sanity.outputs.passed was
+      # computed and read nowhere, so a failing E2E suite could not fail the job.
+      # Deploy run 30665082067 shipped missing OAuth buttons to preprod through
+      # exactly that hole and still wrote ready_for_production: true. This is the
+      # Playwright equivalent of `Check Integration Test Results` above.
+      - name: Check Playwright Sanity Results
+        if: steps.playwright-sanity.outputs.passed != 'true'
+        run: |
+          if [ "${{ steps.playwright-sanity.outputs.skipped }}" = "true" ]; then
+            echo "::error::Playwright gate did not run: ${{ steps.playwright-sanity.outputs.reason }}"
+            echo ""
+            echo "A deploy whose preprod frontend URL never materialised has not been"
+            echo "validated. A gate that could not run is not a gate that passed."
+          else
+            echo "::error::Playwright sanity tests did not pass: ${{ steps.playwright-sanity.outputs.reason }}"
+            echo ""
+            echo "Check the playwright-results artifact for the report and traces."
+            echo ""
+            echo "Common causes:"
+            echo "  - Product defect on preprod: read the failing assertion, it is real"
+            echo "  - Timeout: the suite exceeded the 300s limit"
+            echo "  - Market data unavailable on preprod: the sanity suite needs real OHLC"
+            echo ""
+            echo "Do NOT restore the skip. See specs/1401-deploy-gate-can-fail/spec.md."
+          fi
+          exit 1
+
       - name: Create Validation Metadata
-        if: steps.integration-tests.outputs.passed == 'true'
+        # Spec 1401 FR-004: both gates, stated explicitly rather than relied on by
+        # step ordering. ready_for_production must not outrun the evidence.
+        if: steps.integration-tests.outputs.passed == 'true' && steps.playwright-sanity.outputs.passed == 'true'
         run: |
           SHA="${{ needs.build.outputs.artifact-sha }}"
           cat > validated.json <<EOF
@@ -1719,7 +1763,7 @@ jobs:
           }
           EOF
           cat validated.json
-          echo "✅ Integration tests passed - ready for production!"
+          echo "✅ Integration and Playwright sanity tests passed - ready for production!"
 
       - name: Upload Validation Metadata
         if: success()

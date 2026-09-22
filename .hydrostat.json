@@ -1,0 +1,9 @@
+{
+  "board": "cards/goal.json",
+  "canon_doc": "~/dotfiles/docs/hydrostat.md",
+  "base_branch": "main",
+  "remote": "origin",
+  "improve_cards": {
+    "local": "improve-local"
+  }
+}

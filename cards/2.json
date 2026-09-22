@@ -1,0 +1,26 @@
+{
+  "id": "2",
+  "subject": "bucket source attribution is always \"dedup:\", killing the chart source modes",
+  "activeForm": "Carrying the real provider through ingestion into source_id",
+  "status": "pending",
+  "blocks": [
+    "3"
+  ],
+  "blockedBy": [
+    "1"
+  ],
+  "runConfiguration": {
+    "work_items": [
+      "bucket source attribution is always \"dedup:\", killing the chart source modes"
+    ],
+    "backwards_compatibility": null,
+    "security_tier": null,
+    "operational_rigour": null,
+    "audience": [
+      "maintainer"
+    ],
+    "allow_git_log": false,
+    "md_is_canonical": true
+  },
+  "description": "Status: CARDED, not started. Found during signed-sentiment-fanout research (pending\nrefuter confirmation there; verify before building).\n\n## Symptom\n\nThe dashboard chart's source selector (Aggregated / Tiingo / Finnhub / Our Model)\nrenders the identical line in all four modes.\n\n## Mechanism (two stacked causes)\n\n1. Ingestion constructs `source_id = f\"dedup:{dedup_key}\"`\n   (`src/lambdas/ingestion/handler.py:1035`, the only construction site). Analysis\n   passes it into the fanout, so every timeseries bucket's `sources` entry starts\n   with `dedup:`, never `tiingo`/`finnhub`/`our_model`. The mode filter in\n   `src/lambdas/dashboard/ohlc.py:1074-1080` compares against those names, so every\n   non-aggregated mode filters out every bucket and returns empty history. Test\n   fixtures assume `\"tiingo:91120376\"` format (`tests/unit/test_sentiment_history.py:164`);\n   production data diverged from the fixtures.\n2. The frontend hides the emptiness: see specs/001-chart-stale-series/card.md.\n\n## Fix sketch\n\nCarry the real provider through ingestion into `source_id` (or a parallel field), or\nhave analysis derive it. Decide the format against the sibling endpoint's\n`startswith` filter (`src/lambdas/dashboard/sentiment.py:623`) and the 400-rejection\nof `our_model` in `router_v2.py:1494-1496`. Old buckets keep `dedup:` sources until\nTTL ages them out; the filter needs a story for mixed data."
+}
