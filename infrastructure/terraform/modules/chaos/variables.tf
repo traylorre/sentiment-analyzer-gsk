@@ -17,11 +17,6 @@ variable "lambda_arns" {
   type        = list(string)
 }
 
-variable "lambda_error_alarm_arn" {
-  description = "ARN of the CloudWatch alarm for Lambda errors (kill switch for experiments)"
-  type        = string
-}
-
 # ============================================================================
 # External Chaos Actor Variables (Feature 1237)
 # ============================================================================

@@ -46,7 +46,7 @@ class TestSecretsJitter:
 
         entry = mod._secrets_cache["test-secret"]
         stored_ttl = entry["expires_at"] - time.time()
-        assert_jittered(stored_ttl, 300.0, "secrets")
+        assert_jittered(stored_ttl, float(mod.DEFAULT_CACHE_TTL_SECONDS), "secrets")
 
 
 class TestTiingoJitter:

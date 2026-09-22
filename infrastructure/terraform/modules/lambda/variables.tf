@@ -205,33 +205,3 @@ variable "function_url_cors" {
 
 # Alarm Configuration
 # -------------------
-
-variable "create_error_alarm" {
-  description = "Create CloudWatch alarm for Lambda errors"
-  type        = bool
-  default     = false
-}
-
-variable "error_alarm_threshold" {
-  description = "Number of errors to trigger alarm"
-  type        = number
-  default     = 5
-}
-
-variable "create_duration_alarm" {
-  description = "Create CloudWatch alarm for Lambda duration"
-  type        = bool
-  default     = false
-}
-
-variable "duration_alarm_threshold" {
-  description = "Duration threshold in milliseconds to trigger alarm"
-  type        = number
-  default     = 5000
-}
-
-variable "alarm_actions" {
-  description = "List of ARNs to notify when alarm triggers"
-  type        = list(string)
-  default     = []
-}

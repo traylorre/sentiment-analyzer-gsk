@@ -79,7 +79,7 @@ unmeasured.
 | Configuration | per-container | oldest write | 100 users | 60s | explicit on mutation, plus TTL |
 | Ticker | per-container | single entry | 1 | 300s, then ETag check | ETag change; stale-serve on failure |
 | SSE ResolutionCache | per-container | true LRU | 256 | equals resolution duration | TTL, expiry on read |
-| Secrets | per-container | none | key space is the few secret ids | 300s | TTL or `force_refresh` |
+| Secrets | per-container | none | key space is the few secret ids | 86400s | TTL or `force_refresh` |
 | Quota tracker | per-container | none | key space is the few services | 10s | TTL only |
 | Circuit breaker | per-container | none | key space is the few services | 60s | TTL only |
 | Client (TanStack) | browser tab | library-managed | library-managed | staleTime 5min | refetch interval |
@@ -305,8 +305,9 @@ If metrics are missing entirely: confirm the log group name above, confirm `stre
 
 ## Secrets cache
 
-`src/lambdas/shared/secrets.py`. In-memory cache of Secrets Manager values, TTL 300s
-(`SECRETS_CACHE_TTL_SECONDS`, default `DEFAULT_CACHE_TTL_SECONDS = 300`). Fail-closed: once an
+`src/lambdas/shared/secrets.py`. In-memory cache of Secrets Manager values, TTL 24h
+(`SECRETS_CACHE_TTL_SECONDS`, default `DEFAULT_CACHE_TTL_SECONDS = 86400`; every fetch is a
+billed KMS Decrypt, so the TTL stays long while no secret rotates). Fail-closed: once an
 entry expires there is no stale-serving grace; a failed fetch raises immediately
 (`SecretNotFoundError`, `SecretAccessDeniedError`, or `SecretRetrievalError`,
 `secrets.py:180-217`). `force_refresh=True` bypasses the cache. Auth uses self-issued HMAC

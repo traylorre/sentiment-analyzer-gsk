@@ -40,9 +40,13 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
     hooks:
+      # A unified diff's context lines begin with a space, so a blank context line
+      # IS a line holding one space. Stripping it turns the patch into one git apply
+      # rejects, which is how specs/stash-triage/*.patch got rewritten on first add.
       - id: trailing-whitespace
-        exclude: \.md$
+        exclude: \.(md|patch|diff)$
       - id: end-of-file-fixer
+        exclude: \.(patch|diff)$
       - id: check-yaml
         args: [--allow-multiple-documents]
       - id: check-added-large-files

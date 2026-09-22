@@ -46,12 +46,6 @@ variable "bot_control_action" {
   }
 }
 
-variable "alarm_actions" {
-  description = "SNS topic ARNs for WAF alarm notifications (FR-007)"
-  type        = list(string)
-  default     = []
-}
-
 variable "blocked_requests_threshold" {
   description = "Alarm threshold: blocked requests in 5 minutes (FR-007)"
   type        = number

@@ -347,11 +347,6 @@ module "ingestion_lambda" {
   # Logging
   log_retention_days = var.environment == "prod" ? 90 : 30
 
-  # Alarms
-  create_error_alarm    = true
-  error_alarm_threshold = 5
-  alarm_actions         = [module.monitoring.alarm_topic_arn]
-
   tags = {
     Lambda = "ingestion"
   }
@@ -402,13 +397,6 @@ module "analysis_lambda" {
 
   # Logging
   log_retention_days = var.environment == "prod" ? 90 : 30
-
-  # Alarms
-  create_error_alarm       = true
-  error_alarm_threshold    = 5
-  create_duration_alarm    = true
-  duration_alarm_threshold = 10000 # 10 seconds - account for cold start + S3 download
-  alarm_actions            = [module.monitoring.alarm_topic_arn]
 
   tags = {
     Lambda = "analysis"
@@ -511,11 +499,6 @@ module "dashboard_lambda" {
   # Logging
   log_retention_days = var.environment == "prod" ? 90 : 30
 
-  # Alarms
-  create_error_alarm    = true
-  error_alarm_threshold = 10
-  alarm_actions         = [module.monitoring.alarm_topic_arn]
-
   tags = {
     Lambda = "dashboard"
   }
@@ -559,11 +542,6 @@ module "metrics_lambda" {
 
   # Logging
   log_retention_days = var.environment == "prod" ? 90 : 14
-
-  # Alarms
-  create_error_alarm    = true
-  error_alarm_threshold = 5
-  alarm_actions         = [module.monitoring.alarm_topic_arn]
 
   tags = {
     Lambda = "metrics"
@@ -619,11 +597,6 @@ module "notification_lambda" {
 
   # Logging
   log_retention_days = var.environment == "prod" ? 90 : 30
-
-  # Alarms
-  create_error_alarm    = true
-  error_alarm_threshold = 10
-  alarm_actions         = [module.monitoring.alarm_topic_arn]
 
   tags = {
     Lambda  = "notification"
@@ -839,11 +812,6 @@ module "sse_streaming_lambda" {
   # Logging
   log_retention_days = var.environment == "prod" ? 90 : 30
 
-  # Alarms
-  create_error_alarm    = true
-  error_alarm_threshold = 10
-  alarm_actions         = [module.monitoring.alarm_topic_arn]
-
   tags = {
     Lambda  = "sse-streaming"
     Feature = "016-sse-streaming-lambda"
@@ -908,9 +876,6 @@ module "api_gateway" {
   log_retention_days  = var.environment == "prod" ? 90 : 30
   enable_xray_tracing = true
 
-  # CloudWatch alarms (gated to stay near the 10-alarm free tier in non-prod)
-  create_alarms       = var.enable_extended_cloudwatch_alarms
-  alarm_actions       = [module.monitoring.alarm_topic_arn]
   error_4xx_threshold = 100  # Alert after 100 client errors in 5 minutes
   error_5xx_threshold = 10   # Alert after 10 server errors in 5 minutes
   latency_threshold   = 5000 # Alert if p90 latency > 5 seconds
@@ -945,7 +910,6 @@ module "waf" {
   bot_control_action = "COUNT"
 
   # FR-007: Alert when >500 blocks in 5 minutes
-  alarm_actions              = [module.monitoring.alarm_topic_arn]
   blocked_requests_threshold = 500
 
   tags = {
@@ -1018,7 +982,6 @@ module "waf_cloudfront" {
   bot_control_action = "COUNT"
 
   # Alerting
-  alarm_actions              = [module.monitoring.alarm_topic_arn]
   blocked_requests_threshold = 500
 
   tags = {
@@ -1167,10 +1130,6 @@ module "canary_lambda" {
 
   log_retention_days = var.environment == "prod" ? 90 : 14
 
-  create_error_alarm    = true
-  error_alarm_threshold = 3
-  alarm_actions         = [module.monitoring.alarm_topic_arn]
-
   tags = {
     Lambda  = "canary"
     Feature = "1219-xray-exclusive-tracing"
@@ -1218,35 +1177,6 @@ resource "aws_servicequotas_service_quota" "xray_trace_segments" {
 }
 
 # ===================================================================
-# Module: CloudWatch Alarms -- X-Ray Phase 1 (FR-040, FR-041, FR-134)
-# ===================================================================
-
-module "cloudwatch_alarms" {
-  count  = var.enable_extended_cloudwatch_alarms ? 1 : 0
-  source = "./modules/cloudwatch-alarms"
-
-  environment = var.environment
-  tags = {
-    Feature = "1219-xray-exclusive-tracing"
-  }
-
-  # Wire alarm notifications to SNS topic (was missing — alarms fired but nobody notified)
-  alarm_actions = [module.monitoring.alarm_topic_arn]
-  ok_actions    = [module.monitoring.alarm_topic_arn]
-
-  lambda_function_names = {
-    ingestion    = module.ingestion_lambda.function_name
-    analysis     = module.analysis_lambda.function_name
-    dashboard    = module.dashboard_lambda.function_name
-    notification = module.notification_lambda.function_name
-    metrics      = module.metrics_lambda.function_name
-    sse          = module.sse_streaming_lambda.function_name
-  }
-
-  api_gateway_name = module.api_gateway.api_name
-}
-
-# ===================================================================
 # Module: Chaos Testing (AWS FIS)
 # ===================================================================
 # Uses Lambda fault injection (latency/errors) to test system resilience.
@@ -1274,7 +1204,6 @@ module "chaos" {
   ]
 
   # Kill switch - stops experiments if Lambda errors spike
-  lambda_error_alarm_arn = module.monitoring.analysis_errors_alarm_arn
 
   # Feature 1250: Dashboard Lambda ARN for auto-restore scheduler invoke policy
   dashboard_lambda_arn = module.dashboard_lambda.function_arn
@@ -1457,10 +1386,6 @@ output "alarm_topic_arn" {
   value       = module.monitoring.alarm_topic_arn
 }
 
-output "alarm_names" {
-  description = "List of all CloudWatch alarm names"
-  value       = module.monitoring.alarm_names
-}
 
 # Lambda outputs
 output "sns_topic_arn" {

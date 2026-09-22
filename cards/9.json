@@ -1,0 +1,29 @@
+{
+  "id": "9",
+  "subject": "specs tree hygiene: adjudicate .specify/specs/ strays and audit-delete stale specs/ from main",
+  "activeForm": "Adjudicating the specs tree and deleting what is stale",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": [
+    "1",
+    "8",
+    "10",
+    "11"
+  ],
+  "runConfiguration": {
+    "work_items": [
+      "Adjudicate the feature material stranded under .specify/specs/",
+      "Audited wholesale deletion of stale specs/ on main",
+      "Write the tag policy down once so future sessions inherit it"
+    ],
+    "backwards_compatibility": null,
+    "security_tier": null,
+    "operational_rigour": null,
+    "audience": [
+      "maintainer"
+    ],
+    "allow_git_log": false,
+    "md_is_canonical": true
+  },
+  "description": "Status: CARDED, not started. Commissioned 2026-08-06 so it does not get lost on\nthe kanban board. Linked from specs/001-signed-fanout/card.md while that card\nlives; this card is the durable record.\n\n## Item 1: strays under .specify/specs/\n\n.specify/ is speckit infrastructure (templates, scripts, memory). specs/ is the\ncreated specs. Yet .specify/specs/ holds real feature material:\nohlc-cache-remediation.md with its -tests and -clarifications siblings,\n1276-e2e-cached-data-mock/, and future/. Adjudicate each one: move to specs/ if\nstill live, delete if superseded (item 2 standard applies). The\n.specify/specs/ directory itself goes away at the end.\n\n## Item 2: wholesale deletion of stale specs/\n\nspecs/ holds roughly 380 entries and the vast majority are superseded,\ncontradictory, or stale (loose SESSION-SUMMARY*.md files, an archive/ dir,\nnear-duplicate dirs like 1243-first-chaos-gameday vs 1243-first-gameday,\nterraform-cycle-fix with and without a number). Operator intent, recorded so a\nfuture agent does not relitigate it: this repo is not an archaeological dig; it\ncaptures the latest state. Stale specs confuse agents grepping for insights and\nread poorly to any engineer reviewing the repository. A lot of trial and error\nwent into learning how to write md and spec-driven files; the repo should show\nthe latest iteration only.\n\nMechanism (operator proposal; orchestrator reviewed and concurs, no retired\nbranch):\n\n- Delete stale specs from main outright. Git history is the archive; every\n  deleted directory stays recoverable by commit, so a retired branch would\n  store nothing new while creating a second place for agents to absorb dead\n  designs, and it would rot unmaintained.\n- Version stops are annotated tags off main (v1.0.0 when version 1 retires\n  during version 2 work), never branches. Tags are immutable, maintenance-free,\n  and not accidentally grepped.\n- The sweep is audited, not blind: every directory gets a keep/delete verdict\n  with a one-line reason, batched into reviewable PRs. Anything documenting a\n  still-live decision gets folded into docs/ before its spec dies.\n- Protected floor at sweep time (re-verify then, do not trust this list\n  blindly): active cards per the cards lifecycle (001-signed-fanout,\n  001-live-hero-widget, 001-model-refresh-eval, 001-chart-stale-series,\n  001-digest-never-worked, 001-source-attribution-dead), the quarrysome\n  closeout (deliberately open until its work items land), in-flight feature\n  dirs, and this card.\n\n## Exit criteria\n\n.specify/specs/ no longer exists; specs/ contains only active cards and\nin-flight feature dirs; the tag policy (version stops as annotated tags, no\nretired branches) is written down once in CLAUDE.md or docs/ so future sessions\ninherit it.\n\n## Board note added at the cards migration\n\nThe protected-floor list above names cards by their old specs/<slug>/card.md paths. Those cards are now cards/1.json through cards/8.json and the floor reads: cards 1 through 8, the quarrysome closeout (specs/001-quarrysome-promotion/, deliberately open until its work items land), in-flight feature dirs, and this card. specs/ held 372 entries when this note was written (`ls specs | wc -l` on main at 54bbd326); re-count at sweep time rather than trusting that number."
+}

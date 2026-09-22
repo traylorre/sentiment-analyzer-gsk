@@ -1,0 +1,24 @@
+{
+  "id": "5",
+  "subject": "replace DistilBERT SST-2 with a finance-native sentiment model",
+  "activeForm": "Swapping in a finance-native 3-class sentiment model",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": [
+    "1"
+  ],
+  "runConfiguration": {
+    "work_items": [
+      "replace DistilBERT SST-2 with a finance-native sentiment model"
+    ],
+    "backwards_compatibility": null,
+    "security_tier": null,
+    "operational_rigour": null,
+    "audience": [
+      "maintainer"
+    ],
+    "allow_git_log": false,
+    "md_is_canonical": true
+  },
+  "description": "Status: CARDED, researched 2026-08-05 (all sources fetched that day), not started.\nDepends on signed-fanout shipping first: quality gains are invisible while the\npipeline discards direction.\n\n## Verdict from research\n\nStaying on DistilBERT SST-2 is not defensible on the merits: it is 2-class\nmovie-review sentiment with a thresholded pseudo-neutral, and an equal-latency,\nApache-2.0, finance-native 3-class model exists. The only reason to stay is\nchange-avoidance.\n\nRanked candidates (full survey with citations in the research agent's report;\nhandoff dir ad8ecca61944cd9fc, journal + baton):\n\n1. **mrm8488/distilroberta-finetuned-financial-news-sentiment-analysis** \u2014 the\n   same-cost upgrade. 82M params (vs 66M), same latency class, Apache-2.0, native\n   3-class (0=negative, 1=neutral, 2=positive), ~202k downloads/month, drop-in for\n   the existing transformers pipeline + S3 cold-start pattern. Caveat: its 0.9823\n   accuracy is an in-split Financial PhraseBank number, strong in-domain evidence\n   only.\n2. **ProsusAI/finbert** \u2014 battle-tested default. ~110M, 3-class, 86-97% PhraseBank\n   by annotator agreement (published paper), 5.5M downloads/month. ~2x latency\n   (still trivial at 2048MB), frozen since 2023, license formalized only on the\n   GitHub repo (Apache-2.0), HF weights untagged.\n3. **tabularisai/ModernFinBERT** \u2014 only if cross-domain robustness matters. The one\n   candidate with honest held-out benchmarks (avg 0.75 acc / 0.91 ROC-AUC across\n   FiQA/Twitter/news). Young, low adoption, needs transformers >= 4.48, CPU latency\n   unmeasured.\n\nRejected: yiyanghkust/finbert-tone (no license anywhere \u2014 production blocker);\ndeberta-v3 fine-tune (slowest per token, sentencepiece build dep, in-split evals);\ngeneral-domain successors (no consensus successor to SST-2 exists; finance-tuned\n3-class dominates for headlines \u2014 searched 2026-08-05).\n\n## Implementation notes for pickup\n\n- Read `config.id2label` at load, never hardcode label indices: candidate label\n  orders are mutually reversed (ProsusAI 0=positive; distilroberta 0=negative).\n- Native neutral deletes the NEUTRAL_THRESHOLD=0.6 hack in\n  src/lambdas/analysis/sentiment.py; signed mapping keys off the label either way.\n- New S3 artifact + DEFAULT_MODEL_S3_KEY bump (sentiment.py:59); model_version on\n  stored inferences already exists. MODELING.md documents no re-scoring path, so\n  old and new model scores mix in history unless addressed; decide whether the\n  30-day backfill machinery from signed-fanout is reusable for a re-score.\n- Memory fine: largest candidate ~600MB f32 inside the 2048MB Lambda."
+}
