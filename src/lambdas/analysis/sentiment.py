@@ -49,6 +49,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, NamedTuple
 
+from src.lib.timeseries.signed import label_to_signed
+
 # Structured logging
 logger = logging.getLogger(__name__)
 
@@ -629,20 +631,10 @@ def _label_to_score(sentiment: str, confidence: float) -> float:
     """
     Convert sentiment label and confidence to a score in [-1, 1].
 
-    Args:
-        sentiment: 'positive', 'negative', or 'neutral'
-        confidence: Model confidence (0 to 1)
-
-    Returns:
-        Score in [-1, 1] range
+    Thin delegate to the shared signed mapping so aggregation callers and the
+    fanout/backfill paths cannot drift apart.
     """
-    if sentiment == "positive":
-        return confidence  # 0.6 confidence = 0.6 score
-    elif sentiment == "negative":
-        return -confidence  # 0.6 confidence = -0.6 score
-    else:
-        # Neutral gets a small score based on which side it leans
-        return 0.0  # Truly neutral
+    return label_to_signed(sentiment, confidence)
 
 
 # Custom exceptions

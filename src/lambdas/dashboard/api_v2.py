@@ -5,7 +5,6 @@ API v2 Endpoints for POWERPLAN Mobile Dashboard
 New endpoints supporting the mobile-first sentiment dashboard with:
 - Multi-tag sentiment aggregation
 - Time-series trend data for sparklines
-- Historical data backfill
 
 For On-Call Engineers:
     These endpoints are designed for the mobile dashboard experience.
@@ -18,7 +17,6 @@ For Developers:
     - All endpoints require API key authentication
     - Tag-based queries require the by_tag GSI
     - Trend data is aggregated in memory for small datasets
-    - Backfill uses async pattern with job tracking
 
 Security Notes:
     - All inputs validated via Pydantic

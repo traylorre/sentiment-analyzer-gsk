@@ -84,8 +84,9 @@ and should be checked before writing any dashboard code or test.
 The stored record is a plain dict keyed `source_id` / `timestamp`, assembled by ingestion and then
 amended by analysis. The Pydantic models that look authoritative, `news_item.py` and
 `sentiment_result.py`, have no callers on any live path. Read `docs/MODELING.md` before trusting
-either, and before assuming `score` is signed: the declarations allow `-1.0` to `1.0` and the live
-scorer only ever emits a probability.
+either, and mind the sign convention: the per-item `score` is an unsigned model confidence, while
+the timeseries bucket values are signed contributions in `-1.0` to `1.0`, mapped at the fanout hop
+by `src/lib/timeseries/signed.py` (feature 001-signed-fanout). See `docs/MODELING.md`.
 
 ## Infrastructure and deploy
 

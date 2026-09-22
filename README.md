@@ -13,7 +13,8 @@ It does three things:
 2. **Reads them for you.** A DistilBERT model scores each article
    positive, neutral, or negative, with a confidence score.
 3. **Shows you the picture as it forms.** Sentiment streams into a live dashboard
-   next to the price action, from one-minute buckets out to daily.
+   next to the price action, from one-minute buckets out to daily, on a signed
+   scale where negative news plots below zero.
 
 <!-- GRAPHIC STUB: animated GIF of the live dashboard streaming updates -->
 
