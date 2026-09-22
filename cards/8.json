@@ -3,7 +3,9 @@
   "subject": "the preprod deploy gate cannot fail: four layers each make it advisory, and a real bug already shipped through it",
   "activeForm": "Making the preprod deploy gate able to fail",
   "status": "pending",
-  "blocks": [],
+  "blocks": [
+    "9"
+  ],
   "blockedBy": [],
   "runConfiguration": {
     "work_items": [

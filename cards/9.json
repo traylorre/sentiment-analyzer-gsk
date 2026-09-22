@@ -4,7 +4,12 @@
   "activeForm": "Adjudicating the specs tree and deleting what is stale",
   "status": "pending",
   "blocks": [],
-  "blockedBy": [],
+  "blockedBy": [
+    "1",
+    "8",
+    "10",
+    "11"
+  ],
   "runConfiguration": {
     "work_items": [
       "Adjudicate the feature material stranded under .specify/specs/",
