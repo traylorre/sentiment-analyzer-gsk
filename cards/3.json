@@ -20,6 +20,5 @@
     "allow_git_log": false,
     "md_is_canonical": true
   },
-  "specNumber": "001-chart-stale-series",
   "description": "Status: CARDED, not started. Found during signed-sentiment-fanout research (pending\nrefuter confirmation there; verify before building).\n\n## Symptom\n\nSwitching the chart's source mode appears to work: a line renders in every mode. In\nfact the non-aggregated modes return empty history (see\nspecs/001-source-attribution-dead/card.md) and the chart silently keeps drawing the\nprevious mode's line.\n\n## Mechanism\n\n`frontend/src/components/charts/price-sentiment-chart.tsx:485`:\n`if (!sentimentSeriesRef.current || !sentimentData.length) return;` \u2014 the effect\nearly-returns on empty data and never calls `setData([])`, so the last non-empty\nseries stays on screen. The user sees stale data presented as the selected mode.\n\n## Fix sketch\n\nClear the series (`setData([])`) or render an explicit empty state when the response\nis empty. Decide with the source-attribution card: once real sources flow, empty\nmodes become rare but still possible (e.g. a ticker with only one provider's\ncoverage), and silence is still a lie then."
 }
