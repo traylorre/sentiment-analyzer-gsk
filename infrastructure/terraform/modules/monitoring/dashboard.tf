@@ -174,25 +174,6 @@ resource "aws_cloudwatch_dashboard" "main" {
         }
       },
 
-      # Row 4: Alarm Status
-      {
-        type   = "alarm"
-        x      = 0
-        y      = 18
-        width  = 24
-        height = 3
-        properties = {
-          title = "Active Alarms"
-          alarms = [
-            aws_cloudwatch_metric_alarm.ingestion_errors.arn,
-            aws_cloudwatch_metric_alarm.analysis_errors.arn,
-            aws_cloudwatch_metric_alarm.dashboard_errors.arn,
-            aws_cloudwatch_metric_alarm.sendgrid_quota_warning.arn,
-            aws_cloudwatch_metric_alarm.sendgrid_quota_critical.arn,
-          ]
-        }
-      },
-
       # Row 5: X-Ray Tracing & Canary Health
       {
         type   = "metric"

@@ -164,8 +164,19 @@ test.describe('Dialog Dismissal (Feature 1247)', () => {
     await expect(menuTrigger).toBeVisible({ timeout: 5000 });
     // Scroll into view first (trigger may be at bottom of fixed sidebar), then click.
     // Must use regular click (not evaluate) because Radix DropdownMenu uses pointer events.
+    //
+    // Spec 1401 D3 / issue #950: do NOT pass force: true here. @radix-ui/react-
+    // dismissable-layer@1.1.11 (dist/index.mjs:165-167) attaches its outside-
+    // pointerdown dismissal listener inside a setTimeout(..., 0), one macrotask
+    // after the layer mounts. An outside pointerdown arriving before that is never
+    // seen, and because no further pointer events occur the menu stays open
+    // forever -- a one-shot missed-event race that latches permanently.
+    // force: true skips actionability checks and collapses the margin between
+    // listener registration and the outside click from 65.0-138.4ms to 4.7-11.4ms,
+    // roughly tenfold. Measured with a 50ms induced registration delay: force gave
+    // 6/6 stuck, no-force 0/5.
     await menuTrigger.scrollIntoViewIfNeeded();
-    await menuTrigger.click({ force: true });
+    await menuTrigger.click();
 
     // Assert menu is open (menu items visible)
     const menuItem = page.getByRole('menuitem');

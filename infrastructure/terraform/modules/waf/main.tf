@@ -257,33 +257,4 @@ resource "aws_wafv2_web_acl_association" "main" {
   web_acl_arn  = aws_wafv2_web_acl.main.arn
 }
 
-# ===================================================================
-# CloudWatch Alarm — FR-007
-# ===================================================================
-# Alerts when blocked requests exceed threshold in 5 minutes.
-resource "aws_cloudwatch_metric_alarm" "waf_blocked" {
-  count = length(var.alarm_actions) > 0 ? 1 : 0
-
-  alarm_name          = "${var.environment}-waf-blocked-requests"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods  = 1
-  metric_name         = "BlockedRequests"
-  namespace           = "AWS/WAFV2"
-  period              = 300
-  statistic           = "Sum"
-  threshold           = var.blocked_requests_threshold
-  alarm_description   = "WAF blocked requests exceeded ${var.blocked_requests_threshold} in 5 minutes — possible attack"
-  treat_missing_data  = "notBreaching"
-
-  dimensions = {
-    WebACL = aws_wafv2_web_acl.main.name
-    Region = data.aws_region.current.name
-    Rule   = "ALL"
-  }
-
-  alarm_actions = var.alarm_actions
-
-  tags = var.tags
-}
-
 data "aws_region" "current" {}

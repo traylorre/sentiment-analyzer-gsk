@@ -212,12 +212,6 @@ variable "enable_waf" {
   default     = true
 }
 
-variable "enable_extended_cloudwatch_alarms" {
-  description = "Deploy the extended cloudwatch-alarms module (~26 alarms incl. per-Lambda for_each) and the API Gateway alarms. CloudWatch bills $0.10/alarm beyond the first 10 free. Set false in non-prod to stay near the free tier. The core monitoring module's alarms and its SNS topic are unaffected."
-  type        = bool
-  default     = true
-}
-
 # Controls ONLY the existence of the CloudFront-scoped WAF Web ACL, decoupled
 # from enable_waf (which controls association). Deleting a CloudFront WAF is a
 # two-step transition: the distribution must first drop web_acl_id and finish

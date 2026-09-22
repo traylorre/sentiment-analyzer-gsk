@@ -1,0 +1,24 @@
+{
+  "id": "6",
+  "subject": "live README hero widget",
+  "activeForm": "Building the live README hero and its click-through funnel",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": [
+    "1"
+  ],
+  "runConfiguration": {
+    "work_items": [
+      "live README hero widget"
+    ],
+    "backwards_compatibility": null,
+    "security_tier": null,
+    "operational_rigour": null,
+    "audience": [
+      "maintainer"
+    ],
+    "allow_git_log": false,
+    "md_is_canonical": true
+  },
+  "description": "Status: CARDED, not started. Successor to the static screenshot hero shipped by\n`specs/001-readme-landing/`.\n\n## Idea\n\nThe README hero becomes a live view of the service with a zero-friction path into it.\nGitHub's sanitizer strips script, iframe, style, and event handlers from READMEs and\nproxies every image through camo, so true embedded interactivity is impossible. The\nworkable shape:\n\n1. A new unauthenticated route on the dashboard Lambda renders current sentiment plus\n   price for one ticker as an SVG, `Cache-Control: no-cache`. Camo forwards the origin\n   cache headers, so every README view refetches: the hero is live data on every load\n   (the github-readme-stats mechanism).\n2. The README wraps that image in a link to the deployed customer dashboard, which\n   already mints a guest session on cold load with no sign-in. Visitor sees live data,\n   clicks, and is interacting with the real app in one step.\n3. Funnel, not a rope: guest first, and sign-up (account, alerts) only when they\n   already like it.\n\n## Constraints learned up front\n\n- No JS, no iframe, no widget import in READMEs. Image plus link is the ceiling.\n- The render route is public and unauthenticated: rate-limit it, keep user data out,\n  expect scrapers.\n- Lambda cold start sits on the first-impression path; consider provisioned\n  concurrency or a tiny render cache with short TTL.\n- Preprod daily sentiment is one article per ticker per day (every 24h bucket has\n  count 1), so the drawn series is spiky; pick the ticker and window that read best,\n  or render the aggregated line the dashboard itself shows.\n- Decide which URL is public before shipping the link (preprod Amplify vs prod).\n\n## Also in scope when picked up\n\nFormalize the one-off hero capture (`hero_capture.mjs`, scratchpad) as a guarded e2e\nspec so every suite run regenerates the static fallback screenshot for free. Guard it\nbehind an env flag so CI cannot fail on it. The GIF stub in the README\n(`<!-- GRAPHIC STUB -->`) is retired by this feature too: a live hero plus a real\ncapture makes the animated GIF redundant.\n\n## Carried from PI-RESUME-live-hero-widget.md (2026-08-12)\n\n- Commissioned verbatim by the operator 2026-08-05 as item 3 of three: e2e node fix (shipped, PR #1031), then signed-sentiment-fanout battleplan (card 1), then live-hero-widget \"also battleplan with research component\". No spec, plan or research artifacts exist yet; only this card.\n- Sequencing: a good hero needs card 1 landed first. Today every mode renders an identical line pinned near +1.0, which is exactly the defect card 1 fixes.\n- 1Y is impossible: sentiment history is capped at roughly 90d by TTL, so 3M is the deepest full-coverage range.\n- Dashboard trap (AGENTS.md): the render route goes on the dashboard Lambda (admin stack, vanilla JS side); the click-through target is the CUSTOMER dashboard at https://main.d29tlmksqcx494.amplifyapp.com/.\n- Standing constraint: no new AWS resources without asking, which binds the render-cache decision.\n- hero_capture.mjs lived in session 720d139a's scratchpad and may be gone; it used createRequire against frontend/package.json and ran the non-mocked flow against the Amplify URL."
+}
