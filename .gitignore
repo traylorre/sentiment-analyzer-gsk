@@ -202,3 +202,18 @@ CONTEXT-CARRYOVER*.md.loaded
 
 # ADOT Collector Layer (CI-generated, not committed)
 src/lambdas/sse_streaming/adot-layer/
+
+# Agent scratch trees: carryover handoffs and board inbox envelopes.
+#
+# These were covered ONLY by ~/.gitignore_global on this host, which reaches a
+# tree just once setup.sh has stowed it AND core.excludesfile points at it, so a
+# fresh clone, a CI runner and any container were covered by nothing. The board
+# inbox was covered nowhere at all: `git add -A` would have committed live
+# delivery envelopes, and a committed carryover misroutes a session that reads
+# it, so the failure is worse than noise in history.
+#
+# Unanchored on purpose, so a tree under specs/ or under a linked worktree
+# matches. Settings and extensions a repo versions under .pi/ stay trackable.
+**/.pi/handoff/
+**/.pi/inbox/
+**/.claude/handoff/
