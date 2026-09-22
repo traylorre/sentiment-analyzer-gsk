@@ -1,5 +1,5 @@
 {
-  "id": "NEW",
+  "id": "12",
   "subject": "this repo's vendored create-new-feature.sh predates card 126: it allocates spec numbers by local scan and checks out a branch from inside a card worktree",
   "activeForm": "Propagating the card-aware spec-number allocator into this repository",
   "status": "pending",
