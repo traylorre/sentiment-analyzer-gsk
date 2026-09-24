@@ -1,14 +1,15 @@
 {
   "id": "13",
-  "subject": "the two SKILL.md files are reachable from Claude Code only; pi never reads .claude/skills/",
-  "activeForm": "Making the repo's skills reachable from both harnesses",
+  "subject": "move the two SKILL.md files to .pi/skills/ with relative symlinks from .claude/skills/ (placement ruled)",
+  "activeForm": "Relocating the repo's skills to the ruled dual-harness layout",
   "status": "pending",
   "blocks": [],
   "blockedBy": [],
   "runConfiguration": {
     "work_items": [
-      "Make canon-audit and adversarial-repo-mapping reachable from pi as well as Claude Code, as one copy each",
-      "Verify each is actually listed by the harness that is supposed to load it, rather than inferring it from the directory shape"
+      "git mv .claude/skills/<name> to .pi/skills/<name> for canon-audit and adversarial-repo-mapping",
+      "Create .claude/skills/<name> as a RELATIVE symlink to ../../.pi/skills/<name> for each",
+      "Verify both harnesses list both skills; a plausible directory shape is not evidence"
     ],
     "backwards_compatibility": "none",
     "security_tier": "S1",
@@ -19,5 +20,5 @@
     "allow_git_log": false,
     "md_is_canonical": true
   },
-  "description": "REPORTED by scottgoscott's Helios through the board inbox 2026-09-22 and verified here against the installed pi before carding.\n\nTHE FACT. This repo carries .claude/skills/canon-audit/SKILL.md and .claude/skills/adversarial-repo-mapping/SKILL.md. pi never reads .claude/skills/: `grep -rno '\\.claude[/\\\\]skills' <pi>/dist/` returns zero hits across the whole distribution. pi's project resource roots are <cwd>/.pi/{extensions,skills,prompts,themes} (package-manager.js:1962-1967), plus ~/.agents/skills, neither of which exists here. So both skills are loaded by Claude Code alone, and every pi session in this repo -- which includes every Dynamo, since card-start launches pi -- has them available nowhere.\n\nCORRECTION TO THE REPORT'S PROPOSED FIX. It recommends moving them to .pi/prompts/<name>.md. That is right for workflow commands and wrong for these two. pi loads SKILL.md natively: skills.js:117-137 treats any directory containing a SKILL.md as a skill root and recurses to find them. The pi-native home is therefore .pi/skills/<name>/SKILL.md -- the same directory shape and the same filename these already have, with the same name/description frontmatter. Moving them to prompts/ instead would convert model-invoked skills into slash commands and drop their auto-invocation, which is a behaviour change rather than a relocation.\n\nTHE OPEN QUESTION, which is why this is a card and not a commit. 'One copy each' needs a home chosen, and both harnesses are live in this repo: Dynamos are pi, the operator's own sessions have been Claude Code. Options are a single .pi/skills/ copy with .claude/skills/ symlinked at it (untested here -- confirm Claude Code follows the symlink before relying on it), a single copy in whichever harness actually uses them, or accepting dual maintenance with a note. Dual maintenance is what silently diverges, which is the reason the report was sent.\n\nTHE GENERAL LESSON, worth more than the two files: the reporting repo had five workflow prompts as flat .claude/skills/<name>.md files, which is NEITHER harness's format, so five commands documented as available in its CLAUDE.md had never existed in either harness. Verify a skill or prompt is listed by the harness that should load it; a plausible directory shape is not evidence."
+  "description": "DECIDED 2026-09-22 by operator ruling, recorded on the dotfiles board at f55bae6 (cards/goal.json, ruling (4), 'skill placement on a dual-harness host ruled for ~/projects/sentiment-analyzer-gsk card 13'): the real directory is .pi/skills/<name>/SKILL.md, .claude/skills/<name> is a RELATIVE symlink to it, and both traversals were measured there. .agents/skills is pi-only and is not the answer for a repo that runs both harnesses. No design question remains; this card is now mechanical.\n\nWHY. This repo carries .claude/skills/canon-audit/SKILL.md and .claude/skills/adversarial-repo-mapping/SKILL.md. pi never reads .claude/skills/ (zero hits for that path across its dist); its project roots are <cwd>/.pi/{extensions,skills,prompts,themes} (package-manager.js:1962-1967) and it loads SKILL.md natively (skills.js:117-137). Every Dynamo runs pi, so today no Dynamo can reach either skill.\n\nDO NOT move them to .pi/prompts/. That was the original report's suggestion and it is wrong for skills: prompts become slash commands, which strips model invocation.\n\nRELATIVE, NOT ABSOLUTE. An absolute symlink resolves to the root checkout from inside a card worktree, so a Dynamo would read main's copy instead of its own branch's. The relative target from .claude/skills/<name> is ../../.pi/skills/<name>.\n\nDONE WHEN each skill is listed by pi and by Claude Code from the root checkout AND from a card worktree, and `git ls-files -s .claude/skills` shows mode 120000 for both entries."
 }
