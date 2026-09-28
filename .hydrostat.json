@@ -5,5 +5,10 @@
   "remote": "origin",
   "improve_cards": {
     "local": "improve-local"
-  }
+  },
+  "land_gate": [
+    "env TF_PLUGIN_CACHE_DIR=/home/zeebo/.cache/terraform-plugin-cache terraform -chdir=infrastructure/terraform init -backend=false -input=false",
+    "env PATH=/home/zeebo/projects/sentiment-analyzer-gsk/.venv/bin:/home/zeebo/.local/bin:/usr/local/bin:/usr/bin:/bin make validate",
+    "env PATH=/home/zeebo/projects/sentiment-analyzer-gsk/.venv/bin:/home/zeebo/.local/bin:/usr/local/bin:/usr/bin:/bin make test-unit"
+  ]
 }
