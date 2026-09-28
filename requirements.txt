@@ -38,7 +38,7 @@ sendgrid==6.12.5
 aws-lambda-powertools==3.35.0
 
 # JWT Authentication - Feature 075 (validation gaps)
-PyJWT==2.14.0
+PyJWT==2.15.0
 
 # Retry Library - Feature 1032 (config API stability)
 tenacity==9.1.4
