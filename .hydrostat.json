@@ -7,8 +7,8 @@
     "local": "improve-local"
   },
   "land_gate": [
-    "env TF_PLUGIN_CACHE_DIR=/home/zeebo/.cache/terraform-plugin-cache terraform -chdir=infrastructure/terraform init -backend=false -input=false",
-    "env PATH=/home/zeebo/projects/sentiment-analyzer-gsk/.venv/bin:/home/zeebo/.local/bin:/usr/local/bin:/usr/bin:/bin make validate",
-    "env PATH=/home/zeebo/projects/sentiment-analyzer-gsk/.venv/bin:/home/zeebo/.local/bin:/usr/local/bin:/usr/bin:/bin make test-unit"
+    "sh -c 'mkdir -p \"$HOME/.cache/terraform-plugin-cache\" && TF_PLUGIN_CACHE_DIR=\"$HOME/.cache/terraform-plugin-cache\" exec terraform -chdir=infrastructure/terraform init -backend=false -input=false'",
+    "sh -c 'PATH=\"$(dirname \"$(git rev-parse --path-format=absolute --git-common-dir)\")/.venv/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin\" exec make validate'",
+    "sh -c 'PATH=\"$(dirname \"$(git rev-parse --path-format=absolute --git-common-dir)\")/.venv/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin\" exec make test-unit'"
   ]
 }
