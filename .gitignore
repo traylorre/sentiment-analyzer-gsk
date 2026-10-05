@@ -217,3 +217,7 @@ src/lambdas/sse_streaming/adot-layer/
 **/.pi/handoff/
 **/.pi/inbox/
 **/.claude/handoff/
+
+# speckit records the active feature here per checkout; tracked, it points every
+# worktree at whichever spec the last committer was on.
+.specify/feature.json
