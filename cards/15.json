@@ -1,5 +1,5 @@
 {
-  "id": "NEW",
+  "id": "15",
   "subject": "28 Dependabot alerts are open on main, 3 of them critical in next",
   "activeForm": "Triaging the open Dependabot alerts",
   "status": "pending",
@@ -11,7 +11,7 @@
   },
   "runConfiguration": {
     "work_items": [
-      "Fix or dismiss with a stated reason each open Dependabot alert"
+      "Card #15: fix, or dismiss with a stated reason, each open Dependabot alert"
     ],
     "backwards_compatibility": null,
     "security_tier": null,
