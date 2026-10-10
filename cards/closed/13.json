@@ -1,0 +1,56 @@
+{
+  "id": "13",
+  "closed": "2026-10-10T18:30:55Z",
+  "source": "close",
+  "landing": "529cccf07da1d787620459b74d454bbeea2fd50b",
+  "gaps": [],
+  "card": {
+    "id": "13",
+    "subject": "retire the Claude Code layer in this repo: CLAUDE.md, .claude/skills, .claude/ runtime, and the doc pointers at CLAUDE.md",
+    "activeForm": "Retiring this repo's Claude Code layer per the 2026-09-25 global ruling",
+    "status": "pending",
+    "blocks": [],
+    "blockedBy": [],
+    "runConfiguration": {
+      "work_items": [
+        "git rm CLAUDE.md and delete AGENTS.md:9-10's pointer sentence",
+        "git mv .claude/skills .pi/skills and fix canon-audit/SKILL.md's three Claude-Code-specific lines",
+        "Repoint the six live doc references to CLAUDE.md at AGENTS.md",
+        "Archive the ignored .claude/ runtime from the root checkout; Helios deletes it there after the confirm fast-forward"
+      ],
+      "backwards_compatibility": "none",
+      "security_tier": "S1",
+      "operational_rigour": "basic",
+      "audience": [
+        "maintainer"
+      ],
+      "allow_git_log": false,
+      "md_is_canonical": true
+    },
+    "description": "THE RULING. Operator, 2026-09-25, verbatim (recorded at ~/dotfiles cards/173.json): 'Let's drop claude code support going forward ... so to be clear we are operating with pi+herdr+meridian exclusively, eradicate claude code support, and globally this is the case across all repos.' This SUPERSEDES the 2026-09-22 dual-harness skill-placement ruling this card previously carried. That ruling's symlink plan is dead: no .claude/skills symlink, no Claude Code verification step.\n\nSOURCE OF THE CHANGE SET. ~/dotfiles card 174 (spec 145, other-repos sweep) wrote this repo's checklist into its for_the_board at landing 07f84156f and deferred it here with the reason 'route (a): live board and operator pane'. Items 1, 2 and 6 were done by card #12 (landing 21858dff). Items 3 to 5 are this card, plus a gap the checklist missed (THE SIX POINTERS below). Item 7 (the -hardening worktree) is resolved: its directory and its git registration are both gone, and its HEAD 209e8707 is an ancestor of main, measured 2026-10-10.\n\n1. git rm CLAUDE.md (one line, '@AGENTS.md'; pi reads AGENTS.md first). Delete AGENTS.md:9-10's sentence '`CLAUDE.md` is a pointer at this file so both harnesses read one copy.' Safe for the spec-kit tooling: update-agent-context.sh:640 updates CLAUDE.md only if it exists, :665-666 then updates AGENTS.md, and :708 recreates CLAUDE.md only when NO agent file exists. Never run it as `update-agent-context.sh claude` (:583-584), which writes CLAUDE.md back.\n\n2. git mv .claude/skills .pi/skills (adversarial-repo-mapping, canon-audit; both already pi Agent Skills format, and pi loads SKILL.md natively via skills.js:117-137). In .pi/skills/canon-audit/SKILL.md change CLAUDE.md to AGENTS.md at :56 and :66, and 'One AskUserQuestion' at :87 to 'One question to the operator'. Do NOT move them to .pi/prompts/: prompts become slash commands, which strips model invocation. pi loads project skills only for a TRUSTED project; if pi does not list them, the operator trusts this repo at its next pi open rather than anything being wrong with the files.\n\n3. THE SIX POINTERS, missed by card 174's checklist. Deleting CLAUDE.md leaves these pointing at nothing; each should point at AGENTS.md, and its claim should be re-read against AGENTS.md while there: SERVICE.md:52 and :60, docs/ACTIVE-TECHNOLOGIES.md:29 and :52 (:52 also states update-agent-context.sh appends to CLAUDE.md citing :62, which becomes false; it appends to AGENTS.md via :665-666), docs/SERVICE-SHAPE.md:79, docs/OBSERVABILITY.md:6. EXCLUDED on purpose: docs/cleanup-pristine/milestone-1-verifiable-auth.md:58 and :376, because the md-overhaul closeout classifies docs/cleanup-pristine/ as sealed evidence records that stay dated by nature.\n\n4. The ignored .claude/ runtime (handoff/, recovery-logs/, settings.local.json) exists only in the root checkout, which is Helios's. Decided 2026-10-10 (Helios, option a): the Dynamo archives it per spec 145 FR-007 to ~/.local/state/card-174/sentiment-analyzer-gsk-claude.tar.gz beside the archives card 174 made for other repos, reading the root checkout only, and verifies the archive lists every file under the root .claude/. Helios deletes the three ignored paths from the root checkout after the confirm fast-forward, which also removes the tracked .claude/skills there; after that, .claude/ no longer exists in the root checkout. In the card worktree .claude/ is gone after step 2. Keep the .gitignore lines for .claude/: they guard against a stray re-creation and cost nothing.\n\nREGENERATE THE CENSUS rather than trusting the line numbers above (as of main 1be3447c):\npat='claude code|\\.claude/|CLAUDE\\.md|claude/\\.claude|/battleplan-ux|slash command|claude leg|claude -p|claude --'; hist='(^|/)(specs|docs/carryover-watch|bench/runs|claude/memory)/|BATTLEPLAN-|HANDOFF-|node_modules'; git ls-files '*.md' | grep -vE \"$hist\" | while read f; do n=$(grep -ciE \"$pat\" \"$f\"); [ \"${n:-0}\" -gt 0 ] && echo \"$n $f\"; done\n\nDONE WHEN that census returns only docs/cleanup-pristine/milestone-1-verifiable-auth.md, `git ls-files .claude CLAUDE.md` returns nothing, `test -e .claude` fails in the card worktree (in the root checkout once Helios has deleted the runtime), and pi lists both skills from this repo (subject to the trust note in step 2).",
+    "specNumber": 1402
+  },
+  "status": {
+    "card": "13",
+    "status": "done",
+    "safe_to_teardown": true,
+    "card_after": "DONE",
+    "summary": "The Claude Code layer is retired from the tracked tree. CLAUDE.md is deleted and AGENTS.md no longer calls itself its pointer; update-agent-context.sh updates AGENTS.md (:665-666) and recreates CLAUDE.md only when no agent file exists (:708). Both skills moved to .pi/skills and canon-audit names AGENTS.md and 'One question to the operator'; pi's pinned loader (1.0.4, loadSkills from this worktree) lists adversarial-repo-mapping and canon-audit with no diagnostics. The six pointers in SERVICE.md, docs/ACTIVE-TECHNOLOGIES.md, docs/SERVICE-SHAPE.md and docs/OBSERVABILITY.md name AGENTS.md, which carries the two-dashboards table they cite. The census returns only docs/cleanup-pristine/milestone-1-verifiable-auth.md, `git ls-files .claude CLAUDE.md` prints nothing, and `test -e .claude` fails in this worktree. The root checkout's ignored .claude/ is archived at ~/.local/state/card-174/sentiment-analyzer-gsk-claude.tar.gz, 113 files, identical by diff to `find .claude -type f` there. The land gate's three commands pass locally (terraform init, make validate 8/8 blocking, make test-unit 4226 passed at 80.22% coverage). specNumber 1402 unused; no spec dir was needed.",
+    "for_the_board": [
+      {
+        "to": "Helios",
+        "action": "After the confirm fast-forward of this landing, delete the three ignored paths from the root checkout: rm -rf .claude/handoff .claude/recovery-logs .claude/settings.local.json, then rmdir .claude, and check `test -e .claude` fails there.",
+        "why": "Decided by Helios on 2026-10-10 (option a, recorded in cards/13.json step 4): the root checkout is Helios's. The archive holding all 113 files is ~/.local/state/card-174/sentiment-analyzer-gsk-claude.tar.gz. The fast-forward itself removes the tracked .claude/skills there."
+      },
+      {
+        "to": "Helios",
+        "action": "Delete goal.json priority item 1 (card 13) and drop 13 from READY TO RUN NOW."
+      },
+      {
+        "to": "operator",
+        "action": "If pi does not list adversarial-repo-mapping and canon-audit in this repo, trust the repo at the next pi open.",
+        "why": "pi loads project skills only for a trusted project; the files load cleanly through pi's own loader."
+      }
+    ]
+  }
+}
