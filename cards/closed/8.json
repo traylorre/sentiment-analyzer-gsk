@@ -1,0 +1,46 @@
+{
+  "id": "8",
+  "closed": "2026-10-10T20:01:30Z",
+  "source": "close",
+  "landing": "8be15d1dd6148a65fb6a90f50df4c8034a7d69a3",
+  "gaps": [],
+  "card": {
+    "id": "8",
+    "subject": "constitution-prune remainder: the stash-B doc audit and the BATTLEPLAN tier-1 deferred items",
+    "activeForm": "Working the documentation half of the constitution-prune campaign",
+    "status": "pending",
+    "blocks": [
+      "9"
+    ],
+    "blockedBy": [],
+    "runConfiguration": {
+      "work_items": [
+        "Rebase stash-B against the current docs and run it through a fresh refuter pass",
+        "Adjudicate the BATTLEPLAN tier-1 deferred items: the SECURITY.md lens, docs/diagrams/TEMPLATE.md, infrastructure/terraform/bootstrap/README.md, and whether injected-docs-check.sh becomes a hard gate"
+      ],
+      "backwards_compatibility": "none",
+      "security_tier": "S1",
+      "operational_rigour": "basic",
+      "audience": [
+        "maintainer"
+      ],
+      "allow_git_log": false,
+      "md_is_canonical": true
+    },
+    "description": "DONE in two landings. The deploy-gate half is recorded in specs/1401-deploy-gate-can-fail/spec.md. The doc-audit half is recorded in specs/1401-deploy-gate-can-fail/doc-audit.md.\n\nDOC-AUDIT OUTCOME. Stash-B was already applied, not drifted: its forward apply failed because the text was in the tree. The rebase was moot. The refuter pass ran over the text it left: docs/ci-gotchas.md, docs/runbooks/terraform-state.md, and the CLEANUP-BOARD card it added were corrected. Both stash patches are deleted. Deferred items: SECURITY.md is rewritten to the controls that exist, after it was found claiming four controls FIXED that do not run. docs/diagrams/TEMPLATE.md and infrastructure/terraform/bootstrap/README.md are corrected. injected-docs-check.sh is fixed, moved to scripts/injected-docs/, runnable as `make check-injected-docs`, and recommended BLOCKING. That wiring awaits the operator through the NEW card this branch raises.\n\nOPERATOR ACTIONS STILL OWED, not code. TIINGO_API_KEY and FINNHUB_API_KEY do not exist as repository secrets. Until they do, the 22 @external-api tests run in zero CI contexts.\n\nCARRY FORWARD, measured. Anchoring the accessible name does NOT disambiguate AAPL from AAPLW. The option name computes as 'AAPLApple Inc.' (ticker-input.tsx:215-217, adjacent spans with no whitespace node), so match rows by id=\"ticker-option-<symbol>\".\n\nCONTEXT. deploy-prod, build-sse-image-prod and build-dashboard-image-prod are `if: false` in deploy.yml ('TEMP: Skip production'). The preprod gate's consequences stop at preprod until prod is re-enabled.",
+    "specNumber": 1401
+  },
+  "status": {
+    "status": "done",
+    "safe_to_teardown": true,
+    "card_after": "DONE",
+    "summary": "Both remaining work items are closed. Stash-B was already applied, not drifted, so its rebase was moot; the refuter pass ran over the text it left, corrected docs/ci-gotchas.md, docs/runbooks/terraform-state.md and the CLEANUP-BOARD card it added, and both stash patches are deleted. Deferred items: SECURITY.md was rewritten after it was found claiming four controls FIXED that do not run, in a public repo. docs/diagrams/TEMPLATE.md, the constitution's diagram pointer and infrastructure/terraform/bootstrap/README.md were corrected. injected-docs-check.sh was measured (16 findings at the base: 13 real drift, 3 false positives or checker defects), fixed, moved to scripts/injected-docs/, and made runnable as `make check-injected-docs`, which is not in validate. make validate passes. Record: specs/1401-deploy-gate-can-fail/doc-audit.md.",
+    "for_the_board": [
+      "OPERATOR DECISION, raised as cards/NEW-card-8-injected-docs-gate.json: make check-injected-docs a BLOCKING stage of make validate. Card #8 recommends yes. The measured false-positive rate on the current tree is 0, and 14 real drifts accumulated in the injected docs while nothing ran the checker. The cost: a commit that moves an anchored line must update the citing doc and anchors.tsv in the same commit, and the land gate runs validate. Not wired here, per Helios's ruling. Helios assigns the NEW card's id and places it in goal.json.",
+      "OPERATOR, FYI: SECURITY.md is public. It now lists only controls that exist, plus a Known Gaps section; every gap it names is already readable in the public tfvars and code. The placeholder contact is now the GitHub private vulnerability reporting link (enabled). The existing 48-hour acknowledgement promise was kept as written; only the operator can confirm or withdraw it.",
+      "goal.json: delete card #8 from the priority list. Its close strikes card #9's blockedBy edge to it.",
+      "Still owed by the operator, unchanged: TIINGO_API_KEY and FINNHUB_API_KEY do not exist as repository secrets, so the 22 @external-api tests run in zero CI contexts.",
+      "Five adjacent defects are carded on CLEANUP-BOARD.html, not as board cards. They are: the bare-init terraform state writers; the CI stale-lock steps and comments for a lock that does not exist; the API Gateway CORS gaps; rate_limit.py and hcaptcha.py having no caller; and mermaid-config.json having no reader. Promote any of them to the board if they should be ordered."
+    ]
+  }
+}
