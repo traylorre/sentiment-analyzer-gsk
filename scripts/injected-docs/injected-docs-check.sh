@@ -40,7 +40,7 @@ status=0
 
 CORE=(
   .specify/memory/constitution.md
-  CLAUDE.md
+  AGENTS.md
   docs/SERVICE-SHAPE.md
   docs/MODELING.md
   docs/OBSERVABILITY.md
@@ -77,7 +77,7 @@ is_allowed() {
 # without a directory is the part that cannot be done generically, so extend the
 # list when a core doc starts citing a new root file.
 ROOTS='src|docs|tests|specs|infrastructure|frontend|scripts|\.github|\.specify'
-ROOTFILES='Makefile|CLAUDE\.md|CLEANUP-BOARD\.html|pyproject\.toml|requirements(-dev)?\.txt|SECURITY\.md|docker-compose\.yml|SPEC\.md|mermaid-config\.json|CHANGELOG\.md|README\.md'
+ROOTFILES='Makefile|AGENTS\.md|CLEANUP-BOARD\.html|pyproject\.toml|requirements(-dev)?\.txt|SECURITY\.md|docker-compose\.yml|SPEC\.md|mermaid-config\.json|CHANGELOG\.md|README\.md'
 extract_paths() {
   grep -oE '`[^`]+`' "$1" 2>/dev/null \
     | tr -d '`' \
@@ -141,9 +141,11 @@ fi
 
 # ---------------------------------------------------------------- R4
 if [ -f docs/OBSERVABILITY.md ]; then
-  actual=$( { grep -rhoE '"SentimentAnalyzer[^"]*"' src/ 2>/dev/null | tr -d '"'
-              grep -rhoE 'namespace *= *"SentimentAnalyzer[^"]*"' infrastructure/terraform/ 2>/dev/null \
-                | sed 's/.*"\(.*\)"/\1/'; } | sort -u )
+  # Terraform names a namespace in metric filters (namespace = "...") and in
+  # dashboard widget arrays (["SentimentAnalyzer/Alerts", "AlertsEvaluated", ...]).
+  # A namespace only a dashboard reads still exists for the document's table.
+  actual=$(grep -rhoE '"SentimentAnalyzer[^"]*"' src/ infrastructure/terraform/ --include='*.py' --include='*.tf' 2>/dev/null \
+             | tr -d '"' | sort -u)
   documented=$(grep -oE '`SentimentAnalyzer[^`]*`' docs/OBSERVABILITY.md | tr -d '`' | sort -u)
   while IFS= read -r ns; do
     [ -z "$ns" ] && continue
@@ -180,7 +182,7 @@ if [ -f "$anchors" ]; then
       fail "$claimant: anchor target $path does not exist [R6 anchor-broken]"; continue
     fi
     actual=$(sed -n "${line}p" "$path")
-    grep -qE "$pattern" <<<"$actual" \
+    grep -qE -- "$pattern" <<<"$actual" \
       || fail "$claimant: $path:$line no longer matches /$pattern/ [R6 anchor-drift]"
   done < "$anchors"
 fi

@@ -2,104 +2,58 @@
 
 ## Supported Versions
 
-This service is in pre-production development. Security support will be provided for the latest version only once production releases begin.
+There is no production release, and the production deploy job is disabled. Fixes land only on `main`; there are no release branches.
 
-## Reporting Vulnerabilities
+## Reporting a Vulnerability
 
-Please report security vulnerabilities privately to the project maintainers. Do not create public issues for security concerns.
+Report vulnerabilities privately through GitHub private vulnerability reporting:
+https://github.com/traylorre/sentiment-analyzer-gsk/security/advisories/new
 
-**Contact:** [Configure your security contact email]
+Do not open a public issue for a security concern.
 
 **Response Time:** We aim to acknowledge reports within 48 hours.
 
-## Security Status
+## Controls in Place
 
-✅ **Feature 006 Security Enhancements Implemented**
+Edge and transport
+- API Gateway stage throttling: 100 requests per second steady state, burst 200.
+- The dashboard Lambda has no Function URL and is reached only through API Gateway.
+- The SSE Lambda's Function URL requires AWS_IAM auth and is served through CloudFront.
+- CloudFront connects to the SSE origin over TLS 1.2.
 
+Authentication and sessions
+- Sign-in uses Amazon Cognito hosted OAuth (Google) or email magic links. A magic link is a single-use random token, consumed atomically in DynamoDB.
+- API requests carry an application-issued HS256 JWT. The Lambda validates its signature, issuer and audience, and requires the sub, exp, iat and nbf claims.
+- The dashboard API applies CSRF token middleware.
+- CORS origins come from an explicit per-environment allow-list. Terraform rejects `*`, and prod requires a non-empty list.
 
-### Critical Issues Status
+Secrets
+- Third-party API keys and OAuth client secrets are stored in AWS Secrets Manager under a customer-managed KMS key, and the Lambdas cache them for 24 hours. No secret rotates.
+- The JWT signing secret reaches the Lambdas as an environment variable, set at deploy from a GitHub Actions secret.
 
-**Dashboard Lambda Security**:
-- **P0-1**: ✅ FIXED - IP-based rate limiting with DynamoDB tracking
-- **P0-2**: ✅ FIXED - SSE connection limits implemented (max 2 per IP)
-- **P0-3**: ✅ FIXED - Cognito authentication replaces static API key
-- **P0-4**: ✅ FIXED - Cognito JWT validation at Lambda level
-- **P0-5**: ✅ FIXED - CORS environment-based origins enforced
+Resilience and observability
+- Circuit breakers and per-provider quota tracking guard Tiingo and Finnhub calls during ingestion.
+- X-Ray active tracing runs on six of the seven Lambdas; the canary uses PassThrough.
 
-### High Priority Issues
+Repository and CI
+- GitHub secret scanning with push protection is enabled. gitleaks is a required status check on `main`, and detect-secrets runs in pre-commit and CI.
+- Commits to `main` must be signed.
+- Semgrep gates `make validate`. CodeQL and a pip-audit job run on pull requests; neither is a required status check.
+- Dependabot alerts are enabled, and Dependabot opens weekly version-update PRs. Dependabot security updates are disabled.
+- trivy and checkov scan the Terraform in pre-commit and CI.
 
-- **P1-1**: ✅ FIXED - CloudWatch alarms for error rates, cost burn, notification delivery
-- **P1-2**: ✅ FIXED - IP logging added to authentication failures
+## Known Gaps
 
-### Feature 006 Security Additions
+- There are no CloudWatch alarms. Monitoring is metrics and logs only, by decision.
+- No per-IP rate limit is enforced. The WAF rate rule exists in Terraform but is disabled in preprod, the only deployed environment.
+- The SSE connection cap is 100 per Lambda execution environment, with no per-client limit.
+- The API Gateway Cognito authorizer is disabled.
+- hCaptcha bot protection is not enforced.
+- Authentication failures are logged without the client IP.
+- SendGrid calls have no circuit breaker.
+- CloudFront applies no geo-restriction and sets no minimum viewer TLS version.
 
-- **Circuit Breaker**: Per-service protection (Tiingo, Finnhub, SendGrid)
-- **Quota Tracking**: External API rate limit management
-- **X-Ray Tracing**: Day 1 mandatory on all 6 Lambdas
-- **hCaptcha**: Bot protection for sensitive endpoints
-- **Magic Links**: HMAC-signed passwordless authentication
+## Contributing
 
-### Recommended Deployment Architecture
-
-**Before production**, migrate from Lambda Function URL to:
-1. **CloudFront CDN** - DDoS protection, geo-blocking
-2. **AWS WAF** - IP-based rate limiting, automatic blocking
-3. **API Gateway** - Request throttling (100 req/min), custom authorizer
-4. **Lambda** (current) - Connection limits, API key rotation
-
-**Estimated Cost**: +$5/month
-**Risk Reduction**: 95% (blocks all automated attacks)
-
-Key areas requiring hardening before production deployment:
-- ✅ SSE concurrency exhaustion protection (FIXED)
-- ✅ CORS wildcard removal (FIXED)
-- ✅ IP-based forensic logging (FIXED)
-- ✅ Rate limiting and quota management (FIXED - IP-based with DynamoDB)
-- ✅ Cognito authentication replaces static API keys (FIXED)
-- ✅ CloudWatch security monitoring alarms (FIXED - error rate, cost, delivery alarms)
-
-## Architecture Overview
-
-- Serverless AWS infrastructure (Lambda, DynamoDB, EventBridge, SNS, CloudFront, Cognito)
-- All secrets managed via AWS Secrets Manager with 5-minute TTL caching
-- Authentication via AWS Cognito (JWT tokens, OAuth providers, magic links)
-- External APIs: Tiingo (primary), Finnhub (secondary), SendGrid (notifications)
-- X-Ray distributed tracing on all 6 Lambdas
-- TLS 1.2+ enforced for all external communications
-
-## Known Limitations
-
-This service requires additional security hardening in the following areas:
-1. External API integration resilience
-2. Cost control mechanisms
-3. Operational monitoring and alerting
-
-For implementation requirements, see project specification documentation.
-
-## Security Best Practices
-
-When contributing to this project:
-- Never commit credentials, API keys, or secrets
-- Use parameterized queries for all database operations
-- Validate and sanitize all external inputs
-- Follow AWS security best practices for IAM roles and policies
-- Enable MFA for all AWS and infrastructure accounts
-
-## Claims vs controls
-
-Each claim above checked against live code and terraform: whether a live control backs it, and where.
-
-Backed by a live control:
-
-- IP-based rate limiting (P0-1): per-IP, per-action limits tracked in DynamoDB with TTL cleanup. `src/lambdas/shared/middleware/rate_limit.py`.
-- Cognito authentication (P0-3, P0-4): backing infrastructure exists. `infrastructure/terraform/modules/cognito/`.
-- hCaptcha bot protection: `src/lambdas/shared/middleware/hcaptcha.py`.
-- Magic links (single-use random-token passwordless authentication): `src/lambdas/dashboard/auth.py`.
-- Secrets Manager 5-minute TTL caching: `DEFAULT_CACHE_TTL_SECONDS = 300` at `src/lambdas/shared/secrets.py:45`.
-
-Not backed, or wrong in detail:
-
-- SSE connection limits "max 2 per IP" (P0-2): the code enforces a global cap of 100 connections (`MAX_CONNECTIONS` at `src/lambdas/dashboard/sse.py:60`). No per-IP limit of 2 exists anywhere in the codebase.
-- X-Ray "on all 6 Lambdas" (stated twice above): terraform declares 7 Lambda modules in `infrastructure/terraform/main.tf` (ingestion, analysis, dashboard, metrics, notification, sse_streaming, canary), of which 6 carry `tracing_mode = "Active"`.
-- Recommended Deployment Architecture: stale as a recommendation because the migration already happened. API Gateway at `infrastructure/terraform/main.tf:859`, WAF at `infrastructure/terraform/main.tf:932`, CloudFront for SSE at `infrastructure/terraform/main.tf:966`, dashboard `create_function_url = false` at `infrastructure/terraform/main.tf:508`. One detail remains open: the sse_streaming Lambda keeps a Function URL (`infrastructure/terraform/main.tf:824`, AWS_IAM auth with response streaming).
-- Security contact: the value on line 11 is the unconfigured placeholder text, in a public-facing policy.
+- Never commit credentials. The secret scanners listed above block known formats.
+- Build DynamoDB expressions with expression attribute values. Never concatenate request input into them.

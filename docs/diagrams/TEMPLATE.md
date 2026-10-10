@@ -1,6 +1,6 @@
 # Mermaid Diagram Templates
 
-Standard dark theme templates for consistent diagram styling across the project.
+Dark theme templates for new diagrams.
 
 ## Flowchart Template
 
@@ -14,7 +14,7 @@ flowchart TB
         B --> C["Node C"]
     end
 
-    %% Standard classDef styles - Dark fills with white text
+    %% classDef styles - Dark fills with white text
     classDef external fill:#8B6914,stroke:#F5A623,stroke-width:2px,color:#FFFFFF
     classDef lambda fill:#2B5F7C,stroke:#4A90A4,stroke-width:2px,color:#FFFFFF
     classDef storage fill:#3D6B3D,stroke:#7ED321,stroke-width:2px,color:#FFFFFF
@@ -96,27 +96,7 @@ sequenceDiagram
 
 ## mermaid.live URLs
 
-To view diagrams in mermaid.live with full pan/zoom, the URL must be encoded. Use this Python snippet:
-
-```python
-import zlib
-import base64
-import json
-
-def generate_mermaid_url(diagram_code: str) -> str:
-    # pan/zoom/rough params reset viewport to prevent black screen
-    # (mermaid.live stores viewport state in localStorage)
-    payload = {
-        "code": diagram_code,
-        "mermaid": {"theme": "dark"},
-        "autoSync": True,
-        "updateDiagram": True,
-        "pan": {"x": 0, "y": 0},
-        "zoom": 1,
-        "rough": False,
-    }
-    json_str = json.dumps(payload)
-    compressed = zlib.compress(json_str.encode('utf-8'), 9)
-    encoded = base64.urlsafe_b64encode(compressed).decode('utf-8').rstrip('=')
-    return f"https://mermaid.live/view#pako:{encoded}"
-```
+Generate a mermaid.live view URL with `python scripts/regenerate-mermaid-url.py <file>.mmd`.
+`--validate-only` runs the script's syntax check without generating a URL. That check counts
+brackets and flags a line ending in `-->` or `==>`; it does not parse mermaid, so a diagram that
+passes it can still fail to render.

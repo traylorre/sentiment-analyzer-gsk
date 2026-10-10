@@ -374,3 +374,11 @@ clean: ## Clean generated files
 clean-all: compose-preflight clean localstack-down ## Clean everything including LocalStack
 	$(COMPOSE) down -v
 	rm -rf localstack-data
+
+# ============================================================================
+# Injected-docs drift (manual; not part of validate)
+# ============================================================================
+
+.PHONY: check-injected-docs
+check-injected-docs: ## Check AGENTS.md and the core docs for drifted paths, line citations and lists
+	@bash scripts/injected-docs/injected-docs-check.sh

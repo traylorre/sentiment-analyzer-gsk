@@ -1,0 +1,26 @@
+{
+  "id": "NEW",
+  "subject": "Operator decision: make check-injected-docs a BLOCKING stage of make validate",
+  "activeForm": "Wiring the injected-docs drift check into make validate",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": [],
+  "origin": {
+    "introduced_by": "pre-existing",
+    "evidence": "grep -c 'run_stage check-injected-docs' Makefile  # 0: the drift check is not a validate stage"
+  },
+  "runConfiguration": {
+    "work_items": [
+      "On the operator's yes, add check-injected-docs to the validate driver as a BLOCKING stage and update every citation the insertion moves"
+    ],
+    "backwards_compatibility": null,
+    "security_tier": null,
+    "operational_rigour": null,
+    "audience": [
+      "maintainer"
+    ],
+    "allow_git_log": false,
+    "md_is_canonical": true
+  },
+  "description": "DECISION OWED BY THE OPERATOR. Card #8 recommends yes. Helios ruled the wiring must not land without the operator, because a BLOCKING stage changes every future commit in this repo.\n\nWHAT EXISTS. scripts/injected-docs/injected-docs-check.sh checks AGENTS.md and the core docs with six rules: cited paths exist, file:NN citations land inside the file, the Lambda list matches src/lambdas/ both ways, the CloudWatch namespace table matches code and Terraform, cited make targets exist, and the anchored citations in scripts/injected-docs/anchors.tsv still say what the doc claims. `make check-injected-docs` runs it on demand. scripts/injected-docs/injected-docs-check.proof.sh proves 7 of 7 perturbations firing. The tree is clean.\n\nTHE MEASUREMENT. Nothing ran the checker between its writing and card #8, and in that time the injected docs accumulated 14 real drifts (13 at the base plus 1 that checking AGENTS.md surfaced). The checker also reported 3 false positives or defects. Card #8 fixed all of them. The false-positive rate on the current tree is 0. Record: specs/1401-deploy-gate-can-fail/doc-audit.md.\n\nTHE COST OF YES. A commit that moves an anchored line must update the citing doc and anchors.tsv in the same commit. Today the anchored files are Makefile, .pre-commit-config.yaml, infrastructure/terraform/main.tf, the two dedup.py files and update-agent-context.sh. The land gate runs make validate, so a card that drifts a citation cannot land until it fixes it.\n\nIF YES. Add `run_stage check-injected-docs \"injected docs\" BLOCKING; \\` to the validate driver in the Makefile. Inserted after the existing stages, it moves the lines AGENTS.md cites below it (Makefile:125, :139, :162), and the check itself names every citation to update. Run the proof harness in CI as well, so the checker cannot silently stop detecting.\n\nIF NO. Close this card. The check stays manual, and CLEANUP-BOARD's injected-docs card records the decision."
+}

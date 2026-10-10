@@ -1,0 +1,21 @@
+# Anchored citations: file <TAB> line <TAB> regex that line must match <TAB> which doc claims it
+# R2 only proves a cited line exists. These prove it still says what the doc says it says.
+# Add a row whenever a core doc pins a claim to a specific line.
+# Patterns are POSIX ERE, evaluated with `grep -qE`, so ( ) | . * need escaping to be literal.
+Makefile	81	run_stage fmt-check	AGENTS.md
+Makefile	125	^check-test-target-headers:	AGENTS.md
+Makefile	139	^fmt:	AGENTS.md
+Makefile	162	pip-audit.*\|\| true	AGENTS.md
+.pre-commit-config.yaml	36	^default_stages: \[commit\]	docs/ci-gotchas.md
+.pre-commit-config.yaml	65	id: ruff-check	docs/ci-gotchas.md
+.pre-commit-config.yaml	67	id: ruff-format	docs/ci-gotchas.md
+.pre-commit-config.yaml	76	tfsec and checkov removed	docs/ci-gotchas.md
+.pre-commit-config.yaml	88	id: detect-secrets	docs/ci-gotchas.md
+.pre-commit-config.yaml	135	id: pytest	docs/ci-gotchas.md
+.pre-commit-config.yaml	145	id: mypy	docs/ci-gotchas.md
+.pre-commit-config.yaml	158	id: check-branch-collision	docs/ci-gotchas.md
+.pre-commit-config.yaml	168	id: check-error-log-assertions	docs/ci-gotchas.md
+src/lambdas/ingestion/dedup.py	59	def generate_dedup_key	AGENTS.md
+src/lambdas/shared/utils/dedup.py	11	def generate_dedup_key	AGENTS.md
+infrastructure/terraform/main.tf	930	cloudfront_sse	docs/ACTIVE-TECHNOLOGIES.md
+.specify/scripts/bash/update-agent-context.sh	665	if \[\[ -f "\$AGENTS_FILE" \]\]	docs/ACTIVE-TECHNOLOGIES.md

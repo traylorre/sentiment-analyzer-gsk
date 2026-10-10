@@ -35,7 +35,7 @@ There is no NewsAPI. Zero references in `src/`, `tests/` or `frontend/src/`.
 
 CloudFront is **live**, in front of the SSE Lambda:
 `infrastructure/terraform/modules/cloudfront_sse/`, wired at
-`infrastructure/terraform/main.tf:966`, with the SSE Function URL locked to `AWS_IAM` for
+`infrastructure/terraform/main.tf:930`, with the SSE Function URL locked to `AWS_IAM` for
 CloudFront OAC only (`main.tf:825`).
 
 ## Where the per-feature record lives

@@ -42,7 +42,7 @@ repos:
     hooks:
       # A unified diff's context lines begin with a space, so a blank context line
       # IS a line holding one space. Stripping it turns the patch into one git apply
-      # rejects, which is how specs/stash-triage/*.patch got rewritten on first add.
+      # rejects, so a committed patch file would be rewritten on first add.
       - id: trailing-whitespace
         exclude: \.(md|patch|diff)$
       - id: end-of-file-fixer

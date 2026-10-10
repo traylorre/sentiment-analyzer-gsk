@@ -44,7 +44,7 @@ prove "R1 cited-path-missing" "R1" "docs/OBSERVABILITY.md" \
   "printf '\nSee \`docs/DOES-NOT-EXIST.md\` for detail.\n' >> docs/OBSERVABILITY.md"
 
 prove "R2 citation-past-eof" "R2" "docs/OBSERVABILITY.md" \
-  "printf '\nSee \`CLAUDE.md:999999\` for detail.\n' >> docs/OBSERVABILITY.md"
+  "printf '\nSee \`AGENTS.md:999999\` for detail.\n' >> docs/OBSERVABILITY.md"
 
 # Two directions. Deleting the row proves the forward check, and it must be the
 # TABLE ROW: the bare word "canary" appears in prose elsewhere in the document,

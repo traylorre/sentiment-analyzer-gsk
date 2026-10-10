@@ -32,7 +32,7 @@ Rules:
 
 Three traps in that table. There is **no HTMX** in the admin dashboard despite the header string
 saying so; the string is historical and dozens of test files carry it. The
-`check-test-target-headers` gate (`Makefile:124`) greps only
+`check-test-target-headers` gate (`Makefile:125`) greps only
 `Target:.*(Dashboard|Infrastructure)`, so the wording after that is convention, not enforcement. Second, the dashboard Lambda has no Function
 URL; it is reached through API Gateway. Third, **routes do not discriminate**: both dashboards are
 served by `src/lambdas/dashboard/handler.py` and their route sets overlap, so the API row above is
@@ -70,10 +70,10 @@ Python work needs the venv, which is 3.13 while system Python is not:
 ## Gotchas that cost real time
 
 - **`make validate` does not rewrite your working tree.** Its first stage is `fmt-check`
-  (`Makefile:85`), not `fmt`. The mutating `fmt` target still exists (`Makefile:138`) and nothing
+  (`Makefile:81`), not `fmt`. The mutating `fmt` target still exists (`Makefile:139`) and nothing
   in `validate` calls it. `make -n validate` is refused outright, because `-n` propagates to the
   sub-makes and every stage would report success without running.
-- **Semgrep is the only security scanner that gates.** `pip-audit` (`Makefile:161`) ends in
+- **Semgrep is the only security scanner that gates.** `pip-audit` (`Makefile:162`) ends in
   `|| true`, so a green run is no evidence it found nothing. The `security` stage that carries
   `pip-audit` is declared ADVISORY in the driver, so it cannot fail the run even in principle.
   Every other stage is BLOCKING; the `run_stage` lines in the validate driver
@@ -153,7 +153,7 @@ Flares), the stages, and what each transition requires. Use its names. Nothing h
   inherits it. A run that writes its own evidence into the tree it measures states every census as
   of a fixed commit.
 - Cards are deleted when their work completes, except the quarrysome closeout
-  (`specs/001-quarrysome-promotion/`), which stays open by standing operator decision until its work
+  (card #11, `cards/11.json`), which stays open by standing operator decision until its work
   items land. History in the pull request is the archive.
 - A Dynamo claiming the work is finished attests in `cards/<id>.status.json` committed on its
   branch: `status` done, `safe_to_teardown` true, `card_after` DONE when nothing remains or OPEN
