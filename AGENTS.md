@@ -6,8 +6,7 @@ Repo-specific knowledge that is hard to derive from the code. Rules that bind ch
 This file does not restate what a source file already states. Restated facts drift and give no
 signal that they have drifted; a pointer cannot. It extends the host-global House Rules
 (`~/.pi/agent/AGENTS.md`), which pi loads on every turn, rather than replacing them, so what holds
-on this host regardless of repo stays there. `CLAUDE.md` is a pointer at this file so both harnesses
-read one copy.
+on this host regardless of repo stays there.
 
 ## CRITICAL: Two Dashboards
 

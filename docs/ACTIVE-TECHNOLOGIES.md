@@ -26,7 +26,7 @@ per-spawn context. Architecture is in `docs/SERVICE-SHAPE.md`.
 ## test-e2e
 
 `make test-e2e` runs `AWS_ENV=preprod pytest tests/e2e/ -v -m preprod`: the ADMIN dashboard
-suite (per the two-dashboards table in CLAUDE.md), against a live preprod deployment, which it
+suite (per the two-dashboards table in AGENTS.md), against a live preprod deployment, which it
 requires. The customer dashboard's e2e suite is separate: `cd frontend && npx playwright test`.
 
 Two negatives worth stating, because an agent will otherwise go looking.
@@ -49,7 +49,7 @@ There is no per-feature log here. Three sources, in order of authority:
   time, not what shipped, and they disagree with each other. Verify against code before relying on
   one.
 
-`.specify/scripts/bash/update-agent-context.sh` appends new entries to `CLAUDE.md` (`:62`), matching
+`.specify/scripts/bash/update-agent-context.sh` appends new entries to `AGENTS.md` (`:665-666`), matching
 the exact headings `## Active Technologies` and `## Recent Changes`, and recreates those headings if
 they are absent. Fold anything that accumulates there into the **Current stack** table above,
 rewritten as a statement of what is current. Do not start a per-feature log.

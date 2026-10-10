@@ -3,7 +3,7 @@
 > **CANON**: verified against code.
 
 What the service actually emits, and the rules that bind changes to it. Architecture is in
-`docs/SERVICE-SHAPE.md`; the two dashboards are distinguished in `CLAUDE.md`. Tracing is in
+`docs/SERVICE-SHAPE.md`; the two dashboards are distinguished in `AGENTS.md`. Tracing is in
 `docs/x-ray.md`.
 
 ## Metric namespaces

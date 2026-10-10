@@ -53,7 +53,7 @@ error in this repo:
   and is absent from the env.
 - Check callers, then the definition. A metric function with zero callers emits nothing
   (`record_failover`). Two same-named functions can behave differently and only one is
-  live (`generate_dedup_key`, see CLAUDE.md).
+  live (`generate_dedup_key`, see AGENTS.md).
 - Compare every command flag value to terraform. A restore command carrying stale values
   (memory 512 where the deployed config is 2048) misconfigures the system mid-incident.
 - A health check must be able to fail. `aws cloudwatch describe-alarms --alarm-names X`
@@ -63,7 +63,7 @@ error in this repo:
   in `src/lambdas/` and `frontend/src/`" is evidence; "no ETag machinery" alone is not.
 - State unknowns as unknowns, with the command that would resolve them. Invented
   specifics are the failure mode this skill exists to prevent.
-- Routes do not discriminate between the two dashboards; check the caller (CLAUDE.md,
+- Routes do not discriminate between the two dashboards; check the caller (AGENTS.md,
   "Two Dashboards"). Both are served by `src/lambdas/dashboard/handler.py`.
 
 **Step 4, verdicts**: CONFIRMED carries its citation. REFUTED carries the refuting
@@ -84,7 +84,7 @@ Terminal states: **promoted** (watermark flips to CANON), **deleted**, or
 Promote: <file>
 - [ ] 1. Previous batch PR merged; branch off fresh main
 - [ ] 2. Audit engine (above)
-- [ ] 3. One AskUserQuestion: recommendation first; operator adjudicates
+- [ ] 3. One question to the operator: recommendation first; operator adjudicates
 - [ ] 4. Execute exactly what the operator chose
 - [ ] 5. Verdict record written and schema-validated
 - [ ] 6. Gates green

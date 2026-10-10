@@ -1,0 +1,23 @@
+{
+  "card": "13",
+  "status": "done",
+  "safe_to_teardown": true,
+  "card_after": "DONE",
+  "summary": "The Claude Code layer is retired from the tracked tree. CLAUDE.md is deleted and AGENTS.md no longer calls itself its pointer; update-agent-context.sh updates AGENTS.md (:665-666) and recreates CLAUDE.md only when no agent file exists (:708). Both skills moved to .pi/skills and canon-audit names AGENTS.md and 'One question to the operator'; pi's pinned loader (1.0.4, loadSkills from this worktree) lists adversarial-repo-mapping and canon-audit with no diagnostics. The six pointers in SERVICE.md, docs/ACTIVE-TECHNOLOGIES.md, docs/SERVICE-SHAPE.md and docs/OBSERVABILITY.md name AGENTS.md, which carries the two-dashboards table they cite. The census returns only docs/cleanup-pristine/milestone-1-verifiable-auth.md, `git ls-files .claude CLAUDE.md` prints nothing, and `test -e .claude` fails in this worktree. The root checkout's ignored .claude/ is archived at ~/.local/state/card-174/sentiment-analyzer-gsk-claude.tar.gz, 113 files, identical by diff to `find .claude -type f` there. The land gate's three commands pass locally (terraform init, make validate 8/8 blocking, make test-unit 4226 passed at 80.22% coverage). specNumber 1402 unused; no spec dir was needed.",
+  "for_the_board": [
+    {
+      "to": "Helios",
+      "action": "After the confirm fast-forward of this landing, delete the three ignored paths from the root checkout: rm -rf .claude/handoff .claude/recovery-logs .claude/settings.local.json, then rmdir .claude, and check `test -e .claude` fails there.",
+      "why": "Decided by Helios on 2026-10-10 (option a, recorded in cards/13.json step 4): the root checkout is Helios's. The archive holding all 113 files is ~/.local/state/card-174/sentiment-analyzer-gsk-claude.tar.gz. The fast-forward itself removes the tracked .claude/skills there."
+    },
+    {
+      "to": "Helios",
+      "action": "Delete goal.json priority item 1 (card 13) and drop 13 from READY TO RUN NOW."
+    },
+    {
+      "to": "operator",
+      "action": "If pi does not list adversarial-repo-mapping and canon-audit in this repo, trust the repo at the next pi open.",
+      "why": "pi loads project skills only for a trusted project; the files load cleanly through pi's own loader."
+    }
+  ]
+}
