@@ -1,5 +1,6 @@
 .PHONY: help install validate fmt fmt-check lint security sast audit-pragma audit-exemptions check-banned-terms test test-local test-unit test-integration test-e2e test-spec test-mutation \
         check-test-target-headers check-waitforresponse-race check-iam-patterns check-terraform-version \
+        check-security-alerts check-alert-query-copies \
         compose-preflight localstack-up localstack-down localstack-wait localstack-logs localstack-status \
         tf-init tf-plan tf-apply tf-destroy tf-init-local tf-plan-local tf-apply-local tf-destroy-local \
         cost cost-diff cost-baseline cost-check clean clean-all \
@@ -185,6 +186,16 @@ check-banned-terms: ## Verify no legacy framework references remain
 
 audit-exemptions: ## Audit legacy-term exemptions (inline markers) for validity
 	@python3 scripts/check_banned_terms.py --list-exemptions
+
+# Neither target is a validate stage or a hook. check-security-alerts needs network and a gh
+# credential, and blocking pushes on open alerts is an operator decision (spec 1402, FR-014).
+# The script exits 0 clean, 1 findings, 2 could not determine; make reports both failures as 2,
+# so the VERDICT line is what tells them apart.
+check-security-alerts: ## Report every open code scanning and Dependabot alert (network, gh auth)
+	@python3 scripts/check_security_alerts.py
+
+check-alert-query-copies: ## Report documents that restate the alert query instead of naming the target
+	@python3 scripts/check_security_alerts.py --scan-copies
 
 # ============================================================================
 # Testing

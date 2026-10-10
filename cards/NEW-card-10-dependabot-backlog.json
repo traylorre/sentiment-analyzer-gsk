@@ -1,0 +1,26 @@
+{
+  "id": "NEW",
+  "subject": "28 Dependabot alerts are open on main, 3 of them critical in next",
+  "activeForm": "Triaging the open Dependabot alerts",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": [],
+  "origin": {
+    "introduced_by": "pre-existing",
+    "evidence": "make check-security-alerts"
+  },
+  "runConfiguration": {
+    "work_items": [
+      "Fix or dismiss with a stated reason each open Dependabot alert"
+    ],
+    "backwards_compatibility": null,
+    "security_tier": null,
+    "operational_rigour": null,
+    "audience": [
+      "maintainer"
+    ],
+    "allow_git_log": false,
+    "md_is_canonical": true
+  },
+  "description": "Found by card #10, whose check made these alerts visible: the AGENTS.md instruction never queried Dependabot, so they sat open behind a check that printed 0.\n\nMEASURED 2026-10-10 with make check-security-alerts: 28 open of 208 Dependabot alerts, all npm. By severity: 3 critical, 10 high, 12 medium, 3 low. The 3 critical are next in frontend/package-lock.json (alerts #210, #211, #221). The rest cluster in a few packages: ip-address, js-yaml, extract-zip, browserslist, mermaid, brace-expansion, vitest. Two manifests carry them: package-lock.json at the root and frontend/package-lock.json. Regenerate the list rather than trusting it: make check-security-alerts prints every open alert with number, severity, package, manifest and advisory.\n\nCONTEXT. SECURITY.md records that Dependabot security updates are disabled and only weekly version-update PRs run, so nothing opens a fix PR for these. Code scanning has 0 open of 156.\n\nWHY IT MATTERS TO THE BOARD. Card #10 left the alert check non-gating because 28 open alerts would block every push. Clearing this backlog is the precondition for the operator's call on making make check-security-alerts a blocking pre-push or CI step."
+}

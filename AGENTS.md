@@ -81,14 +81,13 @@ Python work needs the venv, which is 3.13 while system Python is not:
   them and reports each before failing, so one broken stage cannot hide the ones behind it.
 - **SSE handler tests** need `make_function_url_event()` and `parse_streaming_response()` from
   `tests/conftest.py`. A hand-built API Gateway event returns 404 and reads as a routing bug.
-- **Checking security alerts before a push:** filtering `state` client-side returns 0, because the
-  default page is truncated. Query server-side instead:
-
-  ```bash
-  gh api 'repos/traylorre/sentiment-analyzer-gsk/code-scanning/alerts?state=open&per_page=100' --jq length
-  ```
-
-  CI green is not the same as no open alerts.
+- **Checking security alerts before a push:** run `make check-security-alerts`. It reads every
+  page of both code scanning and Dependabot alerts and ends with a `VERDICT:` line: `CLEAN`,
+  `FINDINGS`, or `COULD-NOT-DETERMINE`. `make` reports both failures as exit 2, so read the line.
+  Do not hand-roll a `gh api` query in its place: `--paginate --jq` applies the
+  filter once per page, and a one-page read prints a plausible number. It is not in
+  `make validate` because it needs network and `gh` auth. CI green is not the same as no open
+  alerts.
 - **Push and open the PR in one step** or the branch orphans:
   `git push -u origin HEAD && gh pr create --fill`. The `check-branch-collision` pre-push hook
   catches orphans that slip through.
