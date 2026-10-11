@@ -1,27 +1,27 @@
 {
   "id": "15",
-  "subject": "28 Dependabot alerts are open on main, 3 of them critical in next",
-  "activeForm": "Triaging the open Dependabot alerts",
+  "subject": "Dependabot alert #226 (braces, high) stays open: no patched release exists",
+  "activeForm": "Waiting on an upstream braces release to clear #226",
   "status": "pending",
   "blocks": [],
   "blockedBy": [],
   "origin": {
     "introduced_by": "pre-existing",
-    "evidence": "make check-security-alerts"
+    "evidence": "make check-security-alerts; npm view braces versions --json"
   },
   "runConfiguration": {
     "work_items": [
-      "Card #15: fix, or dismiss with a stated reason, each open Dependabot alert"
+      "Card #15: fix #226 once braces publishes a release above 3.0.3, with npm update braces in frontend/"
     ],
-    "backwards_compatibility": null,
-    "security_tier": null,
-    "operational_rigour": null,
+    "backwards_compatibility": "Major version bumps allowed where the dependent still builds and runs. A test baseline is measured before any update; a test already failing on the baseline does not block the update, and is reported.",
+    "security_tier": "Every open Dependabot alert is fixed. No dismissals.",
+    "operational_rigour": "Frontend build, unit tests and lint, the land gate, and make check-security-alerts after the push. No preprod Playwright run: the operator made it conditional on the Amplify suite currently passing, and deploy run 38086859278 on main 38f5a225 had 31 passed, 1 failed (auth.spec.ts:24 'should show OAuth buttons').",
     "audience": [
       "maintainer"
     ],
     "allow_git_log": false,
     "md_is_canonical": true
   },
-  "description": "Found by card #10, whose check made these alerts visible: the AGENTS.md instruction never queried Dependabot, so they sat open behind a check that printed 0.\n\nMEASURED 2026-10-10 with make check-security-alerts: 28 open of 208 Dependabot alerts, all npm. By severity: 3 critical, 10 high, 12 medium, 3 low. The 3 critical are next in frontend/package-lock.json (alerts #210, #211, #221). The rest cluster in a few packages: ip-address, js-yaml, extract-zip, browserslist, mermaid, brace-expansion, vitest. Two manifests carry them: package-lock.json at the root and frontend/package-lock.json. Regenerate the list rather than trusting it: make check-security-alerts prints every open alert with number, severity, package, manifest and advisory.\n\nCONTEXT. SECURITY.md records that Dependabot security updates are disabled and only weekly version-update PRs run, so nothing opens a fix PR for these. Code scanning has 0 open of 156.\n\nWHY IT MATTERS TO THE BOARD. Card #10 left the alert check non-gating because 28 open alerts would block every push. Clearing this backlog is the precondition for the operator's call on making make check-security-alerts a blocking pre-push or CI step.",
+  "description": "Card #15's first landing fixed 27 of the 28 Dependabot alerts open on 2026-10-10 (specs/1403-dependabot-alert-backlog/spec.md lists each route). #226 remains: braces <= 3.0.3 (GHSA-vfj7-8cjw-p6xm, high) has no patched release, and the operator's security_tier forbids dismissing it.\n\nIn frontend/ two dependents need braces through micromatch 4, whose latest (4.0.8) still requires it: tailwindcss 3 (directly and through chokidar 3), and eslint-config-next through @next/eslint-plugin-next, which pins fast-glob at exactly 3.3.1 as of 16.4.0. A Tailwind 4 migration removes only the first path, so no upgrade in this repo's control clears #226.\n\nTHE WORK, WHEN IT IS RUNNABLE. Check npm view braces versions --json for a release above 3.0.3, or npm view @next/eslint-plugin-next dependencies for a release without fast-glob (and Tailwind 4, the NEW card raised for GHSA-rj75-hqrm-r3gf, for the other path). With a braces release out, the fix is npm update braces in frontend/ on Node 20, then the frontend checks compared against specs/1403-dependabot-alert-backlog/baseline.md, then make check-security-alerts. Nothing is runnable until one of those releases exists.\n\nWHY IT MATTERS TO THE BOARD. Card #10 left make check-security-alerts non-gating because open alerts would block every push. With #226 the only open alert, the operator can decide on gating with that single known exception in view.",
   "specNumber": 1403
 }

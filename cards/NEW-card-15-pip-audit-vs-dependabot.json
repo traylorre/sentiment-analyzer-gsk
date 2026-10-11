@@ -1,0 +1,26 @@
+{
+  "id": "NEW",
+  "subject": "pip-audit reports 207 vulnerabilities in 27 Python packages while Dependabot shows no open pip alert",
+  "activeForm": "Reconciling pip-audit with Dependabot's pip coverage",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": [],
+  "origin": {
+    "introduced_by": "pre-existing",
+    "evidence": "make validate  # dependency audit stage: 'Found 207 known vulnerabilities in 27 packages'; then make check-security-alerts"
+  },
+  "runConfiguration": {
+    "work_items": [
+      "Card #NEW: measure why pip-audit and Dependabot disagree on Python vulnerabilities, and fix whichever side is blind"
+    ],
+    "backwards_compatibility": null,
+    "security_tier": null,
+    "operational_rigour": null,
+    "audience": [
+      "maintainer"
+    ],
+    "allow_git_log": false,
+    "md_is_canonical": true
+  },
+  "description": "Found by card #15. MEASURED 2026-10-10: make validate's dependency audit stage (pip-audit, ADVISORY and ending in || true) reports 207 known vulnerabilities in 27 packages, aiohttp 3.13.3 first. Dependabot has 47 pip records for this repo and 0 open (make check-security-alerts), and the dependency graph lists 103 PyPI packages.\n\nThe cause is unmeasured. One fact narrows it: aiohttp appears in none of requirements.txt, requirements-dev.txt or requirements-ci.txt, so pip-audit is auditing the installed venv (the root checkout's .venv) rather than the declared manifests. Candidates: venv drift from the pins, transitive packages the manifests do not lock and Dependabot cannot see, or packages only the venv carries. Measure which, before deciding whether the manifests need a lock or the venv needs a rebuild."
+}

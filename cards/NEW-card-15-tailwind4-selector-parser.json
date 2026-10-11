@@ -1,0 +1,26 @@
+{
+  "id": "NEW",
+  "subject": "tailwindcss 3 holds postcss-selector-parser on 6.x, inside GHSA-rj75-hqrm-r3gf, and only Tailwind 4 releases it",
+  "activeForm": "Migrating the customer dashboard to Tailwind 4",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": [],
+  "origin": {
+    "introduced_by": "pre-existing",
+    "evidence": "cd frontend && npm audit  # postcss-selector-parser <7.1.6, via tailwindcss and postcss-nested"
+  },
+  "runConfiguration": {
+    "work_items": [
+      "Card #NEW: migrate frontend/ to Tailwind 4 (config, tailwindcss-animate, postcss plugin, globals.css) and verify the customer dashboard visually"
+    ],
+    "backwards_compatibility": null,
+    "security_tier": null,
+    "operational_rigour": null,
+    "audience": [
+      "maintainer"
+    ],
+    "allow_git_log": false,
+    "md_is_canonical": true
+  },
+  "description": "Found by card #15. GHSA-rj75-hqrm-r3gf (postcss-selector-parser < 7.1.6, medium, published 2026-10-05) is reported by npm audit in frontend/ and has no Dependabot record yet; it will open as an alert. tailwindcss 3.4.19, the last 3.x, and postcss-nested 6 require postcss-selector-parser 6.x, so no update inside Tailwind 3 reaches 7.1.6. Tailwind 4 has no dependencies.\n\nThe migration also removes one of the two paths to braces (#226 on card #15, no patched release); the other runs through @next/eslint-plugin-next's exact fast-glob 3.3.1 pin, so this card alone does not clear #226.\n\nScope: tailwind.config.ts (82 lines, shadcn-style theme), the tailwindcss-animate plugin, postcss.config.js, src/app/globals.css, and classes across 88 component files. No gate checks the result visually; that check is part of the work."
+}
