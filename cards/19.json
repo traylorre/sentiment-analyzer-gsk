@@ -1,5 +1,5 @@
 {
-  "id": "NEW",
+  "id": "19",
   "subject": "tailwindcss 3 holds postcss-selector-parser on 6.x, inside GHSA-rj75-hqrm-r3gf, and only Tailwind 4 releases it",
   "activeForm": "Migrating the customer dashboard to Tailwind 4",
   "status": "pending",
@@ -11,7 +11,7 @@
   },
   "runConfiguration": {
     "work_items": [
-      "Card #NEW: migrate frontend/ to Tailwind 4 (config, tailwindcss-animate, postcss plugin, globals.css) and verify the customer dashboard visually"
+      "Card #19: migrate frontend/ to Tailwind 4 (config, tailwindcss-animate, postcss plugin, globals.css) and verify the customer dashboard visually"
     ],
     "backwards_compatibility": null,
     "security_tier": null,

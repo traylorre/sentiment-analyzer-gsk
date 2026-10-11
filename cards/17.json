@@ -1,5 +1,5 @@
 {
-  "id": "NEW",
+  "id": "17",
   "subject": "No CI job runs the frontend's vitest, eslint or build, and on main vitest has 22 failing tests and eslint 29 errors",
   "activeForm": "Putting the frontend's unit tests, lint and build under CI",
   "status": "pending",
@@ -11,7 +11,7 @@
   },
   "runConfiguration": {
     "work_items": [
-      "Card #NEW: diagnose and fix the 22 failing frontend unit tests and 29 lint errors, then add a CI job running frontend vitest, eslint and build"
+      "Card #17: diagnose and fix the 22 failing frontend unit tests and 29 lint errors, then add a CI job running frontend vitest, eslint and build"
     ],
     "backwards_compatibility": null,
     "security_tier": null,
