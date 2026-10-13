@@ -52,13 +52,13 @@ class CacheEntry:
 
     data: dict[str, Any]
     ttl_seconds: int
-    created_at: float  # time.time() when entry was created
-    last_accessed: float  # time.time() when entry was last accessed
+    created_at: float  # time.monotonic() when entry was created
+    last_accessed: float  # time.monotonic() when entry was last accessed
 
     @property
     def is_expired(self) -> bool:
         """Check if entry has exceeded its TTL."""
-        return time.time() - self.created_at > self.ttl_seconds
+        return time.monotonic() - self.created_at > self.ttl_seconds
 
 
 class ResolutionCache:
@@ -125,7 +125,7 @@ class ResolutionCache:
             return None
 
         # Update access time and move to end (most recently used)
-        entry.last_accessed = time.time()
+        entry.last_accessed = time.monotonic()
         self._entries.move_to_end(key)
         self.stats.hits += 1
         return entry.data
@@ -154,7 +154,7 @@ class ResolutionCache:
 
         ttl_seconds = jittered_ttl(resolution.duration_seconds)
 
-        now = time.time()
+        now = time.monotonic()
         self._entries[key] = CacheEntry(
             data=data,
             ttl_seconds=ttl_seconds,

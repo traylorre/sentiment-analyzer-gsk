@@ -267,7 +267,7 @@ def get_ticker_cache(
     global _ticker_cache_entry
 
     with _ticker_cache_lock:
-        now = time.time()
+        now = time.monotonic()
 
         # Check if cache exists and is within TTL
         if _ticker_cache_entry is not None:
@@ -289,7 +289,7 @@ def get_ticker_cache(
             new_cache, new_etag = refreshed
             with _ticker_cache_lock:
                 _ticker_cache_entry = (
-                    time.time(),
+                    time.monotonic(),
                     new_cache,
                     new_etag,
                     jittered_ttl(TICKER_CACHE_TTL),
@@ -301,7 +301,7 @@ def get_ticker_cache(
             if _ticker_cache_entry is not None:
                 _, cache, old_etag, _ = _ticker_cache_entry
                 _ticker_cache_entry = (
-                    time.time(),
+                    time.monotonic(),
                     cache,
                     old_etag,
                     jittered_ttl(TICKER_CACHE_TTL),
@@ -323,7 +323,7 @@ def get_ticker_cache(
     s3_etag = _get_s3_etag(bucket, key)
     with _ticker_cache_lock:
         _ticker_cache_entry = (
-            time.time(),
+            time.monotonic(),
             cache,
             s3_etag,
             jittered_ttl(TICKER_CACHE_TTL),

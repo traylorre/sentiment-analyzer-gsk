@@ -77,7 +77,7 @@ def _get_cached_config_list(user_id: str) -> "ConfigurationListResponse | None":
         entry = _config_list_cache[user_id]
         timestamp, response = entry[0], entry[1]
         effective_ttl = entry[2] if len(entry) > 2 else CONFIG_CACHE_TTL
-        if time.time() - timestamp < effective_ttl:
+        if time.monotonic() - timestamp < effective_ttl:
             _config_cache_stats["list_hits"] += 1
             _config_cw_stats.record_hit()
             return response
@@ -102,7 +102,7 @@ def _set_cached_config_list(
     from src.lib.cache_utils import jittered_ttl
 
     _config_list_cache[user_id] = (
-        time.time(),
+        time.monotonic(),
         response,
         jittered_ttl(CONFIG_CACHE_TTL),
     )
@@ -115,7 +115,7 @@ def _get_cached_config(user_id: str, config_id: str) -> "ConfigurationResponse |
         entry = _config_cache[key]
         timestamp, response = entry[0], entry[1]
         effective_ttl = entry[2] if len(entry) > 2 else CONFIG_CACHE_TTL
-        if time.time() - timestamp < effective_ttl:
+        if time.monotonic() - timestamp < effective_ttl:
             _config_cache_stats["get_hits"] += 1
             _config_cw_stats.record_hit()
             return response
@@ -132,7 +132,7 @@ def _set_cached_config(
     from src.lib.cache_utils import jittered_ttl
 
     _config_cache[(user_id, config_id)] = (
-        time.time(),
+        time.monotonic(),
         response,
         jittered_ttl(CONFIG_CACHE_TTL),
     )

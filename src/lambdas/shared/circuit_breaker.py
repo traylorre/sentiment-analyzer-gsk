@@ -77,7 +77,7 @@ def _get_cached_state(service: str) -> "CircuitBreakerState | None":
             timestamp, state = entry[0], entry[1]
             # Feature 1224: Use jittered TTL if stored
             effective_ttl = entry[2] if len(entry) > 2 else CIRCUIT_BREAKER_CACHE_TTL
-            if time.time() - timestamp < effective_ttl:
+            if time.monotonic() - timestamp < effective_ttl:
                 _cache_stats["hits"] += 1
                 _cb_cache_stats.record_hit()
                 return state
@@ -97,7 +97,7 @@ def _set_cached_state(service: str, state: "CircuitBreakerState") -> None:
 
     with _circuit_breaker_lock:
         _circuit_breaker_cache[service] = (
-            time.time(),
+            time.monotonic(),
             state,
             jittered_ttl(CIRCUIT_BREAKER_CACHE_TTL),
         )

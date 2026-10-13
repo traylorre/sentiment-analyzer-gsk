@@ -18,12 +18,12 @@ For Developers:
 
 import json
 import os
-import time
 
 import boto3
 import pytest
 from moto import mock_aws
 
+import src.lambdas.shared.secrets as secrets_module
 from src.lambdas.shared.secrets import (
     SecretAccessDeniedError,
     SecretNotFoundError,
@@ -34,6 +34,27 @@ from src.lambdas.shared.secrets import (
     get_secret,
     get_secrets_client,
 )
+
+
+class FakeClock:
+    """Stands in for the time module inside secrets.py, with independently movable clocks."""
+
+    def __init__(self) -> None:
+        self._monotonic = 5000.0
+        self._wall = 1_700_000_000.0
+
+    def monotonic(self) -> float:
+        return self._monotonic
+
+    def time(self) -> float:
+        return self._wall
+
+    def advance(self, seconds: float) -> None:
+        self._monotonic += seconds
+        self._wall += seconds
+
+    def step_wall_clock(self, seconds: float) -> None:
+        self._wall += seconds
 
 
 @pytest.fixture
@@ -183,29 +204,46 @@ class TestGetSecret:
         assert_error_logged(caplog, "Failed to parse resource as JSON")
 
     def test_cache_expiry(self, secrets_manager, monkeypatch):
-        """Test that cache expires after TTL."""
-        # Clear any stale cache entries from previous tests
+        """Test that cache serves the old value inside the jittered TTL and refetches after it."""
         clear_cache()
+        clock = FakeClock()
+        monkeypatch.setattr(secrets_module, "time", clock)
+        # jittered_ttl keeps a 100 s TTL inside [90, 110]
+        monkeypatch.setenv("SECRETS_CACHE_TTL_SECONDS", "100")
 
-        # Set short TTL for test (use monkeypatch for proper cleanup)
-        monkeypatch.setenv("SECRETS_CACHE_TTL_SECONDS", "1")
-
-        # First call - caches the secret
         get_secret("dev/sentiment-analyzer/tiingo")
-
-        # Modify the secret
         secrets_manager.update_secret(
             SecretId="dev/sentiment-analyzer/tiingo",
             SecretString=json.dumps({"api_key": "updated-key"}),
         )
 
-        # Wait for cache to expire
-        time.sleep(1.1)
+        clock.advance(89)
+        assert get_secret("dev/sentiment-analyzer/tiingo") == {
+            "api_key": "test-tiingo-key-12345"
+        }
 
-        # Should get new value after cache expiry
-        secret = get_secret("dev/sentiment-analyzer/tiingo")
+        clock.advance(22)
+        assert get_secret("dev/sentiment-analyzer/tiingo") == {"api_key": "updated-key"}
 
-        assert secret == {"api_key": "updated-key"}
+    def test_cache_expires_across_backward_wall_clock_step(
+        self, secrets_manager, monkeypatch
+    ):
+        """Test that a wall clock stepped back does not extend a cached secret's life."""
+        clear_cache()
+        clock = FakeClock()
+        monkeypatch.setattr(secrets_module, "time", clock)
+        monkeypatch.setenv("SECRETS_CACHE_TTL_SECONDS", "100")
+
+        get_secret("dev/sentiment-analyzer/tiingo")
+        secrets_manager.update_secret(
+            SecretId="dev/sentiment-analyzer/tiingo",
+            SecretString=json.dumps({"api_key": "updated-key"}),
+        )
+
+        clock.advance(111)
+        clock.step_wall_clock(-3600)
+
+        assert get_secret("dev/sentiment-analyzer/tiingo") == {"api_key": "updated-key"}
 
 
 class TestGetApiKey:

@@ -1,0 +1,11 @@
+{
+  "status": "done",
+  "safe_to_teardown": true,
+  "card_after": "DONE",
+  "summary": "The 11 jittered_ttl caches measure expiry on time.monotonic(). The secrets and OHLC expiry tests control the clock and fail when the code reads time.time(). The 8 unit-test wall-clock ceilings are gone: concurrency is proved by a barrier and events, duration_ms by fixed clock readings, CPU-bound cost by process_time(), and fails-fast by jwt.decode never being reached. make validate passes 8 of 8 blocking stages; make test-unit passes 4259 of 4259. Spec: specs/1404-monotonic-elapsed-time/spec.md.",
+  "for_the_board": [
+    "Remove #16 from cards/goal.json: priority item 2 and the READY list.",
+    "Number and place cards/NEW-card-16-wall-clock-elapsed-sites.json: 36 time.time() calls left in src/ outside the caches. Some are elapsed time (SSE heartbeats, failover durations, the CloudWatch flush timer) and some are real epochs. Nothing has failed from them, so it ranks below #17 and #18. Its runConfiguration needs backwards_compatibility, security_tier and operational_rigour from the operator.",
+    "The census line in cards/16.json now cites card-16 at 945f6c03, whose tree is main f09ab5d5's outside cards/, in place of the never-pushed a2708bab."
+  ]
+}

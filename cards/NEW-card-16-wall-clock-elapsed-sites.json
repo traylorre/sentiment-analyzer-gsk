@@ -1,0 +1,26 @@
+{
+  "id": "NEW",
+  "subject": "Elapsed time outside the caches is still measured on the wall clock: SSE heartbeats and uptime, failover durations, ingestion metrics, the CloudWatch flush timer and quota_tracker's reduced-rate timers",
+  "activeForm": "Classifying the remaining wall-clock elapsed-time sites",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": [],
+  "origin": {
+    "introduced_by": "pre-existing",
+    "evidence": "grep -rn --include='*.py' 'time\\.time()' src/ | grep -v -E 'src/lib/timeseries/cache.py|dashboard/(metrics|ohlc|sentiment|configurations)\\.py|adapters/(tiingo|finnhub)\\.py|shared/(secrets|circuit_breaker)\\.py|ticker_cache\\.py'"
+  },
+  "runConfiguration": {
+    "work_items": [
+      "Read each remaining time.time() call in src/ in place, move every elapsed-time measurement to time.monotonic() or time.perf_counter(), and leave every value that is a real epoch (serialized, a Lambda deadline, a DynamoDB TTL) on the wall clock"
+    ],
+    "backwards_compatibility": null,
+    "security_tier": null,
+    "operational_rigour": null,
+    "audience": [
+      "maintainer"
+    ],
+    "allow_git_log": false,
+    "md_is_canonical": true
+  },
+  "description": "MEASURED 2026-10-13 by card #16's Dynamo on card-16 at 6955f6a0, whose tree outside cards/, specs/ and the 11 cache modules plus their tests is main f09ab5d5's. Card #16 moved cache expiry in the 11 jittered_ttl caches to time.monotonic() and deliberately stopped there. The origin command lists what it left: 36 time.time() calls, 32 in 10 files outside quota_tracker.py plus quota_tracker.py:151, 155, 171 and 571.\n\nTHE DEFECT is card #16's: a wall clock stepped backwards or forwards gives a wrong elapsed time. Candidates that read as elapsed time: SSE heartbeat and uptime (src/lambdas/sse_streaming/stream.py, connection.py, cache_logger.py), failover durations (src/lambdas/shared/failover.py), ingestion and parallel-fetch duration metrics (src/lambdas/ingestion/metrics.py, parallel_fetcher.py), the timeseries query timer (src/lambdas/dashboard/timeseries.py), the CloudWatch flush interval (src/lib/cache_utils.py), and quota_tracker.py:151-171 (reduced-rate duration, disconnected-alert spam interval).\n\nNOT ALL OF THEM ARE ELAPSED TIME. stream.py:333 compares against a Lambda deadline in epoch milliseconds, quota_tracker.py:571 and src/lambdas/shared/cache/ohlc_cache.py:94 write epoch values, and src/lambdas/ingestion/handler.py:714 needs reading. Each call needs the per-call read card #16's spec 1404 gives the cache sites, not a blanket replace.\n\nTESTS. tests/unit/ingestion/test_parallel_timing.py::test_duration_ms_metric_is_accurate replaces parallel_fetcher's time module with a stub exposing time(); moving parallel_fetcher to another clock means updating that stub. Grep tests/ for patches of each module's time.time before changing it, because a patch of a clock the code no longer reads leaves a test passing on nothing (card #16 found one in test_ohlc_cache.py)."
+}

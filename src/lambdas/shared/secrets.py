@@ -308,7 +308,7 @@ def _get_from_cache(secret_id: str) -> dict[str, Any] | None:
         return None
 
     entry = _secrets_cache[secret_id]
-    if time.time() > entry["expires_at"]:
+    if time.monotonic() > entry["expires_at"]:
         # Cache expired
         del _secrets_cache[secret_id]
         _secrets_cw_stats.record_miss()
@@ -334,7 +334,7 @@ def _set_in_cache(secret_id: str, value: dict[str, Any]) -> None:
 
     _secrets_cache[secret_id] = {
         "value": value,
-        "expires_at": time.time() + jittered_ttl(base_ttl),
+        "expires_at": time.monotonic() + jittered_ttl(base_ttl),
     }
 
 
