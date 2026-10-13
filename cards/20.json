@@ -1,5 +1,5 @@
 {
-  "id": "NEW",
+  "id": "20",
   "subject": "Elapsed time outside the caches is still measured on the wall clock: SSE heartbeats and uptime, failover durations, ingestion metrics, the CloudWatch flush timer and quota_tracker's reduced-rate timers",
   "activeForm": "Classifying the remaining wall-clock elapsed-time sites",
   "status": "pending",
@@ -11,7 +11,7 @@
   },
   "runConfiguration": {
     "work_items": [
-      "Read each remaining time.time() call in src/ in place, move every elapsed-time measurement to time.monotonic() or time.perf_counter(), and leave every value that is a real epoch (serialized, a Lambda deadline, a DynamoDB TTL) on the wall clock"
+      "Card #20: Read each remaining time.time() call in src/ in place, move every elapsed-time measurement to time.monotonic() or time.perf_counter(), and leave every value that is a real epoch (serialized, a Lambda deadline, a DynamoDB TTL) on the wall clock"
     ],
     "backwards_compatibility": null,
     "security_tier": null,
