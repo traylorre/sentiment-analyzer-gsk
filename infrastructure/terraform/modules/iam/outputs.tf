@@ -65,3 +65,8 @@ output "canary_lambda_role_arn" {
   description = "ARN of the Canary Lambda IAM role (1219-xray)"
   value       = var.enable_canary ? aws_iam_role.canary_lambda[0].arn : null
 }
+
+output "backfill_timeseries_role_arn" {
+  description = "ARN of the operator-assumed backfill role (feature 001-signed-fanout)"
+  value       = aws_iam_role.backfill_timeseries.arn
+}

@@ -1171,3 +1171,85 @@ resource "aws_iam_role_policy" "sse_streaming_timeseries" {
     ]
   })
 }
+
+# ===================================================================
+# Backfill Timeseries Role (feature 001-signed-fanout, research D6)
+# ===================================================================
+# Operator-assumed, least-privilege identity for scripts/backfill_timeseries.py:
+# read sentiment-items, write versioned timeseries buckets, quiesce the
+# ingestion schedule rule, verify drain via CloudWatch. Env-prefixed because
+# both environments deploy from one account.
+
+data "aws_caller_identity" "backfill" {}
+
+data "aws_region" "backfill" {}
+
+locals {
+  backfill_ingestion_rule_arn = var.ingestion_schedule_rule_name != "" ? "arn:aws:events:${data.aws_region.backfill.name}:${data.aws_caller_identity.backfill.account_id}:rule/${var.ingestion_schedule_rule_name}" : ""
+}
+
+resource "aws_iam_role" "backfill_timeseries" {
+  name = "${var.environment}-backfill-timeseries-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          AWS = var.operator_principal_arn != "" ? var.operator_principal_arn : "arn:aws:iam::${data.aws_caller_identity.backfill.account_id}:root"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  tags = {
+    Environment = var.environment
+    Feature     = "001-signed-fanout"
+  }
+}
+
+resource "aws_iam_role_policy" "backfill_timeseries" {
+  name = "${var.environment}-backfill-timeseries-policy"
+  role = aws_iam_role.backfill_timeseries.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(
+      [
+        {
+          Sid      = "ReadSentimentItems"
+          Effect   = "Allow"
+          Action   = ["dynamodb:Query", "dynamodb:Scan"]
+          Resource = var.dynamodb_table_arn
+        },
+        {
+          Sid      = "WriteTimeseriesBuckets"
+          Effect   = "Allow"
+          Action   = ["dynamodb:GetItem", "dynamodb:PutItem"]
+          Resource = var.timeseries_table_arn
+        },
+        {
+          # GetMetricData supports no resource-level scoping (research D6)
+          Sid      = "DrainCheck"
+          Effect   = "Allow"
+          Action   = ["cloudwatch:GetMetricData"]
+          Resource = "*"
+        }
+      ],
+      local.backfill_ingestion_rule_arn != "" ? [
+        {
+          Sid    = "QuiesceIngestionRule"
+          Effect = "Allow"
+          Action = [
+            "events:DescribeRule",
+            "events:DisableRule",
+            "events:EnableRule"
+          ]
+          Resource = local.backfill_ingestion_rule_arn
+        }
+      ] : []
+    )
+  })
+}

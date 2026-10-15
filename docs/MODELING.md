@@ -46,9 +46,13 @@ name.
 unchanged at `src/lambdas/analysis/sentiment.py:274`. Direction is carried by the separate
 `sentiment` string (`positive` / `negative` / `neutral`), assigned by thresholding that same score.
 
-The Pydantic models declare `score` with `ge=-1.0, le=1.0`, so a signed range is legal in the type
-and never produced by the live scorer. Do not infer from the model declaration that negative scores
-appear in stored data.
+The Pydantic models declare `score` with `ge=-1.0, le=1.0`. Since feature 001-signed-fanout the
+signed range is real, but only in the timeseries buckets: the fanout hop maps label plus confidence
+to a signed contribution through `src/lib/timeseries/signed.py` (`label_to_signed`), so bucket
+`open/high/low/close/sum/avg` run the full `-1.0` to `1.0`. The per-item `score` stays the unsigned
+model confidence. Buckets written before the cutover still hold unsigned values until TTL ages them
+out, up to 90 days on the daily resolution; the mixed window ends when the last pre-cutover bucket
+expires.
 
 On the API response, `confidence` is a duplicate of `score`
 (`src/lambdas/analysis/handler.py:215`), set only to satisfy a contract test.
@@ -82,7 +86,9 @@ and loads the identical model. There is no model changelog.
 
 ## Re-running inference is not supported
 
-There is no replay, rescore or backfill path in `src/`. The analysis write is guarded by
+There is no re-inference path in `src/`: nothing replays or rescores an article through the
+model. The only backfill is `scripts/backfill_timeseries.py`, which recomputes timeseries
+aggregates from already-scored items and never re-runs inference. The analysis write is guarded by
 `ConditionExpression="#status = :pending"` and flips status to `analyzed`
 (`src/lambdas/analysis/handler.py:340`), so a re-delivered item is rejected rather than re-scored.
 Re-scoring an already-scored item requires a code change.
