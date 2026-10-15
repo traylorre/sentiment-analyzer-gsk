@@ -226,24 +226,28 @@ class TestValidateJWT:
         token = create_test_token()
         config = JWTConfig(secret=TEST_SECRET, audience="sentiment-analyzer-api")
 
-        start_time = time.time()
+        # CPU time, which neither a loaded scheduler nor a clock step advances
+        start_time = time.process_time()
         for _ in range(1000):
             validate_jwt(token, config)
-        elapsed = time.time() - start_time
+        elapsed = time.process_time() - start_time
 
-        assert elapsed < 1.0, f"1000 validations took {elapsed:.2f}s (expected <1s)"
+        assert elapsed < 1.0, (
+            f"1000 validations took {elapsed:.2f}s of CPU (expected <1s)"
+        )
 
     def test_missing_jwt_secret_fails_fast(self):
-        """Should return None quickly if no config available."""
+        """Should return None without attempting to decode if no config available."""
         token = create_test_token()
 
-        with patch.dict("os.environ", {}, clear=True):
-            start_time = time.time()
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch.object(jwt, "decode") as mock_decode,
+        ):
             claim = validate_jwt(token)  # No config, should use env
-            elapsed = time.time() - start_time
 
             assert claim is None
-            assert elapsed < 0.1, "Should fail fast without config"
+            mock_decode.assert_not_called()
 
     def test_invalid_issuer_rejected(self):
         """JWT with wrong issuer should return None."""

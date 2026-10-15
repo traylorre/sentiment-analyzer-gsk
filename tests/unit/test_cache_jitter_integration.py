@@ -45,7 +45,7 @@ class TestSecretsJitter:
         mod._set_in_cache("test-secret", {"api_key": "test"})
 
         entry = mod._secrets_cache["test-secret"]
-        stored_ttl = entry["expires_at"] - time.time()
+        stored_ttl = entry["expires_at"] - time.monotonic()
         assert_jittered(stored_ttl, float(mod.DEFAULT_CACHE_TTL_SECONDS), "secrets")
 
 

@@ -4,6 +4,7 @@ import { Component, type ReactNode, type ErrorInfo, useRef, useEffect } from 're
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { hardNavigate } from '@/lib/utils/url';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -40,7 +41,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   };
 
   handleGoHome = () => {
-    window.location.href = '/';
+    hardNavigate('/');
   };
 
   render() {

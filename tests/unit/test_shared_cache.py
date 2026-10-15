@@ -84,7 +84,7 @@ class TestCacheExpiration:
 
         # Manually expire by adjusting created_at (past max jitter: 60s * 1.1 = 66s)
         entry = cache._entries[("AAPL", Resolution.ONE_MINUTE)]
-        entry.created_at = time.time() - 70  # 70 seconds ago (beyond jitter range)
+        entry.created_at = time.monotonic() - 70  # 70 seconds ago (beyond jitter range)
 
         # Now should be expired
         assert cache.get("AAPL", Resolution.ONE_MINUTE) is None
@@ -102,7 +102,7 @@ class TestCacheExpiration:
         # Manually expire by adjusting created_at
         entry = cache._entries[("AAPL", Resolution.ONE_HOUR)]
         # Feature 1224: TTL has ±10% jitter, so max TTL is 3960s. Set well past that.
-        entry.created_at = time.time() - 4000  # Well past max jittered TTL
+        entry.created_at = time.monotonic() - 4000  # Well past max jittered TTL
 
         # Now should be expired
         assert cache.get("AAPL", Resolution.ONE_HOUR) is None

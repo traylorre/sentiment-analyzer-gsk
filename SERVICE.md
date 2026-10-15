@@ -49,7 +49,7 @@ freshness the product promises. Read them together when touching either.
   gate set, `make test-local` the unit + integration run.
 - Admin dashboard e2e: `pytest tests/e2e/` (preprod required). Customer dashboard e2e:
   `cd frontend && npx playwright test`. The two dashboards are distinct stacks; the table in
-  `CLAUDE.md` is the authority.
+  `AGENTS.md` is the authority.
 - Performance methodology: [docs/operations/PERFORMANCE_VALIDATION.md](docs/operations/PERFORMANCE_VALIDATION.md)
 - Customer e2e suite guide: [frontend/tests/e2e/README.md](frontend/tests/e2e/README.md)
 - Chaos preflight: [docs/chaos-testing/preflight-checklist.md](docs/chaos-testing/preflight-checklist.md)
@@ -57,5 +57,5 @@ freshness the product promises. Read them together when touching either.
 ## Not part of this tree
 
 Rules that bind changes live in `.specify/memory/constitution.md`. Repo-specific agent knowledge
-lives in `CLAUDE.md`. Tech debt lives on `CLEANUP-BOARD.html`. `README.md` is the landing page
+lives in `AGENTS.md`. Tech debt lives on `CLEANUP-BOARD.html`. `README.md` is the landing page
 and will later point here.

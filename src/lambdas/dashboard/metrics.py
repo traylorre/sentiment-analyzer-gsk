@@ -76,7 +76,7 @@ def _get_cached_result(cache_key: str) -> Any | None:
         entry = _metrics_cache[cache_key]
         timestamp, result = entry[0], entry[1]
         effective_ttl = entry[2] if len(entry) > 2 else METRICS_CACHE_TTL
-        if time.time() - timestamp < effective_ttl:
+        if time.monotonic() - timestamp < effective_ttl:
             _metrics_cache_stats["hits"] += 1
             _metrics_cw_stats.record_hit()
             return result
@@ -98,7 +98,7 @@ def _set_cached_result(cache_key: str, result: Any) -> None:
         _metrics_cache_stats["evictions"] += 1
 
     effective_ttl = jittered_ttl(METRICS_CACHE_TTL)
-    _metrics_cache[cache_key] = (time.time(), result, effective_ttl)
+    _metrics_cache[cache_key] = (time.monotonic(), result, effective_ttl)
 
 
 def get_metrics_cache_stats() -> dict[str, int]:

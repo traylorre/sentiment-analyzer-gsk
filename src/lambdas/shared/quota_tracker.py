@@ -86,7 +86,7 @@ def _get_cached_tracker() -> "QuotaTracker | None":
     with _quota_cache_lock:
         if _quota_tracker_cache is not None:
             timestamp, tracker, _, effective_ttl = _quota_tracker_cache
-            if time.time() - timestamp < effective_ttl:
+            if time.monotonic() - timestamp < effective_ttl:
                 _quota_cache_stats["hits"] += 1
                 _quota_cw_stats.record_hit()
                 return tracker
@@ -104,7 +104,7 @@ def _set_cached_tracker(tracker: "QuotaTracker", synced: bool = False) -> None:
     """
     global _quota_tracker_cache
     with _quota_cache_lock:
-        now = time.time()
+        now = time.monotonic()
         last_sync = (
             now
             if synced
@@ -127,7 +127,7 @@ def _needs_sync() -> bool:
         if _quota_tracker_cache is None:
             return False
         _, _, last_sync, _ = _quota_tracker_cache
-        return time.time() - last_sync >= QUOTA_TRACKER_SYNC_INTERVAL
+        return time.monotonic() - last_sync >= QUOTA_TRACKER_SYNC_INTERVAL
 
 
 def get_quota_cache_stats() -> dict[str, int]:
