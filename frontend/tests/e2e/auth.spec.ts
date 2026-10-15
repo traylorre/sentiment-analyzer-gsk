@@ -22,15 +22,28 @@ test.describe('Authentication Flow', () => {
   });
 
   test('should show OAuth buttons', async ({ page }) => {
+    // Providers vary by environment: preprod enables Google only
+    // (infrastructure/terraform/preprod.tfvars), the local API enables both.
+    const providersResponse = page.waitForResponse(
+      (r) => r.url().includes('/api/v2/auth/oauth/urls') && r.request().method() === 'GET'
+    );
     await page.goto('/auth/signin');
+    const response = await providersResponse;
+    expect(response.status()).toBe(200);
+    const providers = Object.keys((await response.json()).providers);
 
-    // Google button
+    // Google is configured in every environment, so zero buttons always fails.
+    expect(providers).toContain('google');
     const googleButton = page.getByRole('button', { name: /continue with google/i });
     await expect(googleButton).toBeVisible();
 
-    // GitHub button
+    // GitHub renders exactly when the API offers it.
     const githubButton = page.getByRole('button', { name: /continue with github/i });
-    await expect(githubButton).toBeVisible();
+    if (providers.includes('github')) {
+      await expect(githubButton).toBeVisible();
+    } else {
+      await expect(githubButton).toHaveCount(0);
+    }
   });
 
   test('should show email input is required', async ({ page }) => {

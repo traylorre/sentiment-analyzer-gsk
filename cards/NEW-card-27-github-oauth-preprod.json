@@ -1,0 +1,27 @@
+{
+  "id": "NEW",
+  "subject": "GitHub sign-in is off on preprod because the Cognito GitHub IdP points at the GitHub Actions OIDC issuer",
+  "activeForm": "Deciding whether preprod offers GitHub sign-in and how Cognito would reach GitHub",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": [],
+  "origin": {
+    "introduced_by": "pre-existing",
+    "evidence": "card 27, 2026-10-15: preprod GET /api/v2/auth/oauth/urls returns providers=[google]; infrastructure/terraform/preprod.tfvars:74-84 enables Google only and says GitHub's IdP is known-broken; infrastructure/terraform/modules/cognito/github.tf:15-32 sets oidc_issuer and jwks_uri to token.actions.githubusercontent.com"
+  },
+  "runConfiguration": {
+    "work_items": [
+      "Decide whether preprod should offer GitHub sign-in; if yes, make the Cognito GitHub IdP reach GitHub's user OAuth rather than the Actions token issuer, and enable it"
+    ],
+    "backwards_compatibility": null,
+    "security_tier": null,
+    "operational_rigour": null,
+    "audience": [
+      "maintainer",
+      "customer"
+    ],
+    "allow_git_log": false,
+    "md_is_canonical": true
+  },
+  "description": "Target: Customer Dashboard (Next.js/Amplify).\n\nMEASURED. Preprod's sign-in page shows Google only, by configuration: preprod.tfvars:74-84 sets cognito_identity_providers = [\"Google\"] and warns not to add GitHub. modules/cognito/github.tf:15-32 declares GitHub as an OIDC provider whose oidc_issuer and jwks_uri are the GitHub Actions token service, which issues workflow tokens, not user identity; a GitHub OAuth App returns no OIDC id_token, so this IdP cannot sign a user in as written.\n\nFIRST, AN OPERATOR CALL. Is GitHub sign-in wanted on preprod at all? A no closes this card (and the github.tf block becomes a cleanup question). A yes needs a GitHub OAuth App secret in preprod/sentiment-analyzer/github-oauth and a route from Cognito to GitHub that Cognito supports, which may be a new AWS resource (an OIDC shim) and so needs the operator before it is built.\n\nTEST. frontend/tests/e2e/auth.spec.ts:24 already shows the GitHub button exactly when the API returns github, so enabling it needs no test change."
+}
