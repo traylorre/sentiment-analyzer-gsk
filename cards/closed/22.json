@@ -1,0 +1,50 @@
+{
+  "id": "22",
+  "closed": "2026-10-15T10:07:49Z",
+  "source": "close",
+  "landing": "d8cadd373832a9438f5b380d32d41694719bd791",
+  "gaps": [],
+  "card": {
+    "id": "22",
+    "subject": "check-branch-collision refuses every push from a card worktree, because it reads the checked-out branch and finds Hydrostat's own claim ref",
+    "activeForm": "Teaching check-branch-collision about pushed refs and Hydrostat claims",
+    "status": "pending",
+    "blocks": [],
+    "blockedBy": [],
+    "origin": {
+      "introduced_by": "pre-existing",
+      "evidence": "cd ~/worktrees/sentiment-analyzer-gsk/card-<id> && git push --dry-run origin HEAD:refs/heads/some-other-branch  # prints ORPHAN BRANCH DETECTED for card-<id>"
+    },
+    "runConfiguration": {
+      "work_items": [
+        "Card #22: make check-branch-collision judge the refs being pushed, not the checked-out branch"
+      ],
+      "backwards_compatibility": "Keep the manual run working: ./scripts/check-branch-collision.sh with no pre-push context still checks the checked-out branch.",
+      "security_tier": "low: local pre-push guard, no secrets, no AWS resources, no new CI gate.",
+      "operational_rigour": "standard: tests run real git against a local bare origin with only gh stubbed, a mutant proves they bind, make validate green.",
+      "audience": [
+        "maintainer"
+      ],
+      "allow_git_log": false,
+      "md_is_canonical": true
+    },
+    "description": "Found by card #17 on 2026-10-14. scripts/check-branch-collision.sh (pre-push stage) takes BRANCH from git rev-parse --abbrev-ref HEAD and refuses when origin has that branch with no PR. In a card worktree the checked-out branch is card-<id>, and origin/card-<id> always exists as Hydrostat's claim ref with no PR, so every push from a card worktree is refused as an orphan, including a refspec push to a different remote branch (git push origin HEAD:refs/heads/card-17-frontend-ci). The hook never reads the pushed refs, which git supplies on the pre-push hook's stdin. Card #17 worked around it with a temporary worktree checked out on the target branch name. Fix: read local_ref remote_ref pairs from stdin and check each remote_ref; treat refs/heads/card-<n> claim refs as known. Decision: the hook reads PRE_COMMIT_REMOTE_BRANCH, not stdin. pre-commit (4.5.1 measured, pre_commit/commands/hook_impl.py _pre_push_ns) consumes git's pre-push stdin and exports the first ref carrying commits the remote lacks, so stdin is empty by the time the script runs. A manual run still judges the checked-out branch. card-<n> passes as a claim ref, and the remote lookup matches refs/heads/<branch> exactly.",
+    "specNumber": 1407
+  },
+  "status": {
+    "status": "done",
+    "safe_to_teardown": true,
+    "card_after": "DONE",
+    "summary": "scripts/check-branch-collision.sh judges the pushed ref from PRE_COMMIT_REMOTE_BRANCH, falls back to the checked-out branch on a manual run, passes card-<n> claim refs and tags, and matches refs/heads/<branch> exactly. tests/unit/scripts/test_check_branch_collision.py: 9 tests on real git against a scratch bare origin with gh stubbed, one of them a real git push through real pre-commit using the repo's own hook definition. Mutant: 8 of 9 fail against the original script; the passing one is the manual run on an orphan, the behaviour kept by the operator's backwards_compatibility answer.",
+    "evidence": [
+      "Before: SKIP=pytest git push --dry-run origin HEAD:refs/heads/card-22-collision-probe from this worktree printed ORPHAN BRANCH DETECTED for card-22",
+      "pytest tests/unit/scripts/test_check_branch_collision.py: 9 passed, also with GIT_DIR and GIT_WORK_TREE exported as a linked worktree's pre-push does; core.bare stayed false",
+      "make validate after the land gate's terraform init: all 8 blocking stages PASS"
+    ],
+    "for_the_board": [
+      "Remove card #22 from goal.json's priority order and READY list. Pushes from a card worktree to any non-orphan branch now pass check-branch-collision; the temporary-worktree workaround card #17 used is no longer needed.",
+      "The root checkout's .venv has pre-commit 4.5.1 while requirements-dev.txt and requirements-ci.txt pin 4.6.2. Host venv drift, not a repo defect; a pip install -r requirements-dev.txt in the root checkout repairs it.",
+      "A global improve drop was filed: pre-commit's pre-push stage hides git's stdin from hooks and exports PRE_COMMIT_REMOTE_BRANCH for one ref only."
+    ]
+  }
+}
