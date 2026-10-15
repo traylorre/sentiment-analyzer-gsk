@@ -157,22 +157,21 @@ class TestOHLCCacheGetSet:
         assert ohlc_module._ohlc_cache_stats["hits"] == 1
 
     def test_cache_expiry(self):
-        """Expired cache entries should return None."""
+        """Entries are served inside the TTL and dropped after it, on the monotonic clock."""
         import src.lambdas.dashboard.ohlc as ohlc_module
 
         test_data = {"ticker": "AAPL", "candles": []}
         cache_key = "ohlc:AAPL:1:2024-01-01:2024-01-31"
 
-        _set_cached_ohlc(cache_key, test_data)
-
-        # Mock time to simulate expiry (1-minute TTL is 300s)
-        with patch("src.lambdas.dashboard.ohlc.time.time") as mock_time:
-            # First call at T=0, second call at T=301 (past 5 min TTL)
+        # A two-field entry carries no jittered TTL, so the 1-minute resolution's 300 s applies
+        with patch("src.lambdas.dashboard.ohlc.time.monotonic") as mock_time:
             ohlc_module._ohlc_cache[cache_key] = (1000.0, test_data)
-            mock_time.return_value = 1000.0 + 301  # Past 1-minute TTL (300s)
 
-            result = _get_cached_ohlc(cache_key, "1")
-            assert result is None
+            mock_time.return_value = 1000.0 + 299
+            assert _get_cached_ohlc(cache_key, "1") == test_data
+
+            mock_time.return_value = 1000.0 + 301
+            assert _get_cached_ohlc(cache_key, "1") is None
             assert cache_key not in ohlc_module._ohlc_cache
 
 
@@ -269,11 +268,11 @@ class TestOHLCCacheInvalidation:
 
         # Add some entries
         ohlc_module._ohlc_cache["ohlc:AAPL:D:2024-01-01:2024-01-31"] = (
-            time.time(),
+            time.monotonic(),
             {"ticker": "AAPL"},
         )
         ohlc_module._ohlc_cache["ohlc:MSFT:D:2024-01-01:2024-01-31"] = (
-            time.time(),
+            time.monotonic(),
             {"ticker": "MSFT"},
         )
 
@@ -288,15 +287,15 @@ class TestOHLCCacheInvalidation:
 
         # Add entries for different tickers
         ohlc_module._ohlc_cache["ohlc:AAPL:D:2024-01-01:2024-01-31"] = (
-            time.time(),
+            time.monotonic(),
             {"ticker": "AAPL"},
         )
         ohlc_module._ohlc_cache["ohlc:AAPL:5:2024-01-01:2024-01-31"] = (
-            time.time(),
+            time.monotonic(),
             {"ticker": "AAPL"},
         )
         ohlc_module._ohlc_cache["ohlc:MSFT:D:2024-01-01:2024-01-31"] = (
-            time.time(),
+            time.monotonic(),
             {"ticker": "MSFT"},
         )
 
@@ -312,7 +311,7 @@ class TestOHLCCacheInvalidation:
         import src.lambdas.dashboard.ohlc as ohlc_module
 
         ohlc_module._ohlc_cache["ohlc:AAPL:D:2024-01-01:2024-01-31"] = (
-            time.time(),
+            time.monotonic(),
             {"ticker": "AAPL"},
         )
 

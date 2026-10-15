@@ -58,7 +58,7 @@ def _get_from_cache(key: str, ttl: int) -> Any | None:
         timestamp, value = entry[0], entry[1]
         # Feature 1224: Use stored jittered TTL if available, else base TTL
         effective_ttl = entry[2] if len(entry) > 2 else ttl
-        if time.time() - timestamp < effective_ttl:
+        if time.monotonic() - timestamp < effective_ttl:
             _finnhub_stats.record_hit()
             return value
         # Expired - remove from cache
@@ -77,7 +77,7 @@ def _put_in_cache(key: str, value: Any, base_ttl: int = 0) -> None:
         oldest_key = min(_finnhub_cache.keys(), key=lambda k: _finnhub_cache[k][0])
         del _finnhub_cache[oldest_key]
     effective_ttl = jittered_ttl(base_ttl) if base_ttl > 0 else 0
-    _finnhub_cache[key] = (time.time(), value, effective_ttl)
+    _finnhub_cache[key] = (time.monotonic(), value, effective_ttl)
 
 
 def clear_cache() -> None:

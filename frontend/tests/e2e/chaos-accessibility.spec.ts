@@ -35,8 +35,8 @@ test.describe('Chaos: Accessibility During Degradation', () => {
     await forceErrorBoundary(page);
 
     // Wait for error boundary to fully render with accessible buttons.
-    // Timeout increased from default 2000ms — error boundary renders after
-    // ErrorTrigger's useEffect → setState → re-render → throw → catch cycle.
+    // Timeout increased from default 2000ms: the error boundary renders only after
+    // hydration, when ErrorTrigger re-renders with the client flag and throws.
     await waitForAccessibilityTree(page, {
       selector: 'button[type="button"]',
       attributes: ['type'],

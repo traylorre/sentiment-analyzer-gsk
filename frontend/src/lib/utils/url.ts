@@ -37,3 +37,13 @@ export function joinUrl(baseUrl: string, path: string): string {
 
   return `${normalizedBase}/${normalizedPath}`;
 }
+
+/**
+ * Navigates with a full page load, which discards every piece of in-memory
+ * state: the memory-only auth store, the query cache, and a React tree stuck
+ * in an error state. Use it only where that reset is the point; in-app
+ * navigation belongs to next/link or the router.
+ */
+export function hardNavigate(path: string): void {
+  window.location.href = path;
+}

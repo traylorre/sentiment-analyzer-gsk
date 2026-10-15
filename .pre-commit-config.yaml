@@ -42,7 +42,7 @@ repos:
     hooks:
       # A unified diff's context lines begin with a space, so a blank context line
       # IS a line holding one space. Stripping it turns the patch into one git apply
-      # rejects, which is how specs/stash-triage/*.patch got rewritten on first add.
+      # rejects, so a committed patch file would be rewritten on first add.
       - id: trailing-whitespace
         exclude: \.(md|patch|diff)$
       - id: end-of-file-fixer
@@ -130,9 +130,11 @@ repos:
       # Run pytest on push only (not on every commit)
       # NOTE: Uses .venv/bin/python3 explicitly because pre-commit runs in its own
       # subprocess and doesn't inherit an activated venv. Requires bootstrap first.
+      # A linked worktree (a hydrostat card) has no .venv of its own, so the hook
+      # falls back to the main checkout's, found through git's common dir.
       - id: pytest
         name: pytest
-        entry: bash -c '.venv/bin/python3 -m pytest tests/unit -x --tb=short -q'
+        entry: bash -c 'V=.venv; [ -x "$V/bin/python3" ] || V="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/.venv"; "$V/bin/python3" -m pytest tests/unit -x --tb=short -q'
         language: system
         types: [python]
         pass_filenames: false

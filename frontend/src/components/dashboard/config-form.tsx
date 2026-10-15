@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Plus, Trash2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,18 @@ interface ConfigFormProps {
   maxTickers?: number;
 }
 
+function initialFields(editingConfig: Configuration | null | undefined) {
+  if (editingConfig) {
+    return {
+      name: editingConfig.name,
+      tickers: editingConfig.tickers,
+      timeframeDays: editingConfig.timeframeDays,
+      includeExtendedHours: editingConfig.includeExtendedHours,
+    };
+  }
+  return { name: '', tickers: [] as TickerConfig[], timeframeDays: 7, includeExtendedHours: false };
+}
+
 export function ConfigForm({
   isOpen,
   editingConfig,
@@ -31,28 +43,24 @@ export function ConfigForm({
   const isEditing = !!editingConfig;
 
   // Form state
-  const [name, setName] = useState('');
-  const [tickers, setTickers] = useState<TickerConfig[]>([]);
-  const [timeframeDays, setTimeframeDays] = useState(7);
-  const [includeExtendedHours, setIncludeExtendedHours] = useState(false);
+  const [initial] = useState(() => initialFields(editingConfig));
+  const [name, setName] = useState(initial.name);
+  const [tickers, setTickers] = useState<TickerConfig[]>(initial.tickers);
+  const [timeframeDays, setTimeframeDays] = useState(initial.timeframeDays);
+  const [includeExtendedHours, setIncludeExtendedHours] = useState(initial.includeExtendedHours);
   const [error, setError] = useState<string | null>(null);
 
-  // Initialize form when editing
-  useEffect(() => {
-    if (editingConfig) {
-      setName(editingConfig.name);
-      setTickers(editingConfig.tickers);
-      setTimeframeDays(editingConfig.timeframeDays);
-      setIncludeExtendedHours(editingConfig.includeExtendedHours);
-    } else {
-      // Reset for create mode
-      setName('');
-      setTickers([]);
-      setTimeframeDays(7);
-      setIncludeExtendedHours(false);
-    }
+  // Re-initialize the form when it opens or its target changes
+  const [formInputs, setFormInputs] = useState({ editingConfig, isOpen });
+  if (formInputs.editingConfig !== editingConfig || formInputs.isOpen !== isOpen) {
+    setFormInputs({ editingConfig, isOpen });
+    const next = initialFields(editingConfig);
+    setName(next.name);
+    setTickers(next.tickers);
+    setTimeframeDays(next.timeframeDays);
+    setIncludeExtendedHours(next.includeExtendedHours);
     setError(null);
-  }, [editingConfig, isOpen]);
+  }
 
   const handleAddTicker = useCallback(
     (ticker: TickerConfig) => {
