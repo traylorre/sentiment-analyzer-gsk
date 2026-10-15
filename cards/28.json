@@ -1,5 +1,5 @@
 {
-  "id": "NEW",
+  "id": "28",
   "subject": "GitHub sign-in is off on preprod because the Cognito GitHub IdP points at the GitHub Actions OIDC issuer",
   "activeForm": "Deciding whether preprod offers GitHub sign-in and how Cognito would reach GitHub",
   "status": "pending",
@@ -11,7 +11,7 @@
   },
   "runConfiguration": {
     "work_items": [
-      "Decide whether preprod should offer GitHub sign-in; if yes, make the Cognito GitHub IdP reach GitHub's user OAuth rather than the Actions token issuer, and enable it"
+      "Card #28: decide whether preprod should offer GitHub sign-in; if yes, make the Cognito GitHub IdP reach GitHub's user OAuth rather than the Actions token issuer, and enable it"
     ],
     "backwards_compatibility": null,
     "security_tier": null,
