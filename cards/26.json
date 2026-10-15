@@ -1,5 +1,5 @@
 {
-  "id": "NEW",
+  "id": "26",
   "subject": "Session-expiry messages are never shown: clearTokensAndRedirect writes them to the memory-only auth store and then reloads the page",
   "activeForm": "Making session-expiry messages survive the redirect",
   "status": "pending",
@@ -11,7 +11,7 @@
   },
   "runConfiguration": {
     "work_items": [
-      "Show the AUTH_013/014/018 message after the forced redirect"
+      "Card #26: show the AUTH_013/014/018 message after the forced redirect"
     ],
     "backwards_compatibility": null,
     "security_tier": null,

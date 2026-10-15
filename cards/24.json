@@ -1,5 +1,5 @@
 {
-  "id": "NEW",
+  "id": "24",
   "subject": "PR Checks' Pre-commit Hooks job fails on main because detect-secrets flags the landing sha in every cards/closed/*.json archive",
   "activeForm": "Teaching the CI detect-secrets step that card archives carry commit shas",
   "status": "pending",
@@ -11,7 +11,7 @@
   },
   "runConfiguration": {
     "work_items": [
-      "PR Checks' Pre-commit Hooks job fails on main because detect-secrets flags the landing sha in every cards/closed/*.json archive"
+      "Card #24: pR Checks' Pre-commit Hooks job fails on main because detect-secrets flags the landing sha in every cards/closed/*.json archive"
     ],
     "backwards_compatibility": null,
     "security_tier": null,

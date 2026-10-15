@@ -1,5 +1,5 @@
 {
-  "id": "NEW",
+  "id": "23",
   "subject": "PR Checks' Dependency Vulnerability Scan has failed on every main push since three pip-audit ignores expired on 2026-09-30",
   "activeForm": "Re-evaluating the expired mcp pip-audit ignores",
   "status": "pending",
@@ -11,7 +11,7 @@
   },
   "runConfiguration": {
     "work_items": [
-      "PR Checks' Dependency Vulnerability Scan has failed on every main push since three pip-audit ignores expired on 2026-09-30"
+      "Card #23: pR Checks' Dependency Vulnerability Scan has failed on every main push since three pip-audit ignores expired on 2026-09-30"
     ],
     "backwards_compatibility": null,
     "security_tier": null,

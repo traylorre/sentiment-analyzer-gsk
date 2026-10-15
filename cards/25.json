@@ -1,5 +1,5 @@
 {
-  "id": "NEW",
+  "id": "25",
   "subject": "The alert form wipes what the user typed whenever the alerts page re-renders, because useConfigs returns a freshly filtered array each render",
   "activeForm": "Stopping the alert form from resetting on parent re-renders",
   "status": "pending",
@@ -11,7 +11,7 @@
   },
   "runConfiguration": {
     "work_items": [
-      "Stop AlertForm resetting user input when its parent re-renders"
+      "Card #25: stop AlertForm resetting user input when its parent re-renders"
     ],
     "backwards_compatibility": null,
     "security_tier": null,

@@ -1,5 +1,5 @@
 {
-  "id": "NEW",
+  "id": "21",
   "subject": "A pre-push from any linked worktree flips the shared repo to core.bare=true: a unit test runs git init with the hook's GIT_DIR inherited",
   "activeForm": "Isolating the unit suite's git calls from the hook environment",
   "status": "pending",
@@ -11,7 +11,7 @@
   },
   "runConfiguration": {
     "work_items": [
-      "Stop unit tests inheriting GIT_* from the hook environment"
+      "Card #21: stop unit tests inheriting GIT_* from the hook environment"
     ],
     "backwards_compatibility": null,
     "security_tier": null,

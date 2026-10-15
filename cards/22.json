@@ -1,5 +1,5 @@
 {
-  "id": "NEW",
+  "id": "22",
   "subject": "check-branch-collision refuses every push from a card worktree, because it reads the checked-out branch and finds Hydrostat's own claim ref",
   "activeForm": "Teaching check-branch-collision about pushed refs and Hydrostat claims",
   "status": "pending",
@@ -11,7 +11,7 @@
   },
   "runConfiguration": {
     "work_items": [
-      "Make check-branch-collision judge the refs being pushed, not the checked-out branch"
+      "Card #22: make check-branch-collision judge the refs being pushed, not the checked-out branch"
     ],
     "backwards_compatibility": null,
     "security_tier": null,
