@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { Clock, AlertTriangle } from 'lucide-react';
 import { useDataFreshness, formatCompact, type FreshnessState } from '@/hooks/use-data-freshness';
 
@@ -52,21 +52,20 @@ export function DataFreshnessIndicator({
   className = '',
 }: DataFreshnessIndicatorProps) {
   const { ageMs, state, formattedAge } = useDataFreshness(lastUpdated);
-  const prevStateRef = useRef<FreshnessState>(state);
-  const announceRef = useRef<string>('');
+  const [announcedState, setAnnouncedState] = useState<FreshnessState>(state);
+  const [announcement, setAnnouncement] = useState('');
 
-  // Track state transitions for aria-live announcements
-  useEffect(() => {
-    if (state !== prevStateRef.current && state !== 'loading') {
-      const label = state === 'fresh'
+  // Announce state transitions through aria-live; a return to loading is not one
+  if (state !== announcedState && state !== 'loading') {
+    setAnnouncedState(state);
+    setAnnouncement(
+      state === 'fresh'
         ? 'Data connection restored'
         : state === 'stale'
           ? 'Data may be outdated'
-          : 'Data is significantly outdated';
-      announceRef.current = label;
-      prevStateRef.current = state;
-    }
-  }, [state]);
+          : 'Data is significantly outdated'
+    );
+  }
 
   // Loading state: hidden
   if (state === 'loading' || !lastUpdated) {
@@ -89,7 +88,7 @@ export function DataFreshnessIndicator({
     >
       {/* State transition announcements only */}
       <span className="sr-only" aria-live="polite">
-        {announceRef.current}
+        {announcement}
       </span>
 
       {/* Warning icon for stale/critical states */}

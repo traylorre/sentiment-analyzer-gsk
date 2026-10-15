@@ -48,7 +48,7 @@ export function SentimentPill({
     lg: 'w-5 h-5',
   };
 
-  const PillContent = () => (
+  const pillContent = (
     <>
       {/* Glow effect */}
       <div
@@ -112,11 +112,11 @@ export function SentimentPill({
             exit={{ opacity: 0, y: -10 }}
             transition={{ type: 'spring', stiffness: 300, damping: 25 }}
           >
-            <PillContent />
+            {pillContent}
           </motion.div>
         </AnimatePresence>
       ) : (
-        <PillContent />
+        pillContent
       )}
     </div>
   );

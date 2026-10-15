@@ -108,5 +108,5 @@ disabling branch protection, no marking a failing check as expected.
 - Service shape, deployment topology, and what does not exist: `docs/SERVICE-SHAPE.md`
 - Output schema, retention, model versioning: `docs/MODELING.md`
 - Metrics, alarms, dashboard privacy rules: `docs/OBSERVABILITY.md`
-- Diagrams: build from `docs/diagrams/TEMPLATE.md`; shared theme is `mermaid-config.json`, at the repo root
+- Diagrams: build from `docs/diagrams/TEMPLATE.md`
 - Tech debt: `CLEANUP-BOARD.html`. Append to an existing card rather than creating a duplicate.

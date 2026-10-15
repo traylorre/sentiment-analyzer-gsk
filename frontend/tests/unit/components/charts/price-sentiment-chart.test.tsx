@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { PriceSentimentChart } from '@/components/charts/price-sentiment-chart';
+
+// Crosshair handlers the chart subscribes, for tooltip tests
+const crosshairCallbacks: Array<(param: unknown) => void> = [];
 
 // 1318: Track visible range callbacks for zoom-out auto-upgrade tests
 let visibleRangeCallbacks: Array<(range: { from: number; to: number } | null) => void> = [];
@@ -26,7 +29,9 @@ vi.mock('lightweight-charts', () => ({
       }),
       unsubscribeVisibleLogicalRangeChange: vi.fn(),
     })),
-    subscribeCrosshairMove: vi.fn(),
+    subscribeCrosshairMove: vi.fn((cb: (param: unknown) => void) => {
+      crosshairCallbacks.push(cb);
+    }),
     remove: vi.fn(),
   })),
   ColorType: { Solid: 'Solid' },
@@ -99,10 +104,32 @@ describe('PriceSentimentChart', () => {
     useChartDataCalls = [];
     mockChartDataOverride = null;
     visibleRangeCallbacks = [];
+    crosshairCallbacks.length = 0;
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  describe('Crosshair tooltip', () => {
+    it('formats the tooltip date for the resolution selected after the chart was created', () => {
+      render(<PriceSentimentChart ticker="AAPL" initialResolution="D" />);
+      fireEvent.click(screen.getByRole('button', { name: '5m resolution' }));
+
+      const time = 1704115800; // 2024-01-01 13:30 UTC
+      act(() => {
+        crosshairCallbacks.at(-1)!({ point: { x: 1, y: 1 }, time, seriesData: new Map() });
+      });
+
+      const intraday = new Date(time * 1000).toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'numeric',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      });
+      expect(screen.getByText(intraday)).toBeInTheDocument();
+    });
   });
 
   describe('T022: Resolution selector rendering', () => {

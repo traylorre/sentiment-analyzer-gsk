@@ -92,7 +92,7 @@ describe('OAuthButtons', () => {
   });
 
   it('should render both Google and GitHub buttons', () => {
-    render(<OAuthButtons />);
+    render(<OAuthButtons availableProviders={['google', 'github']} />);
 
     expect(
       screen.getByRole('button', { name: /continue with google/i })
@@ -102,8 +102,29 @@ describe('OAuthButtons', () => {
     ).toBeInTheDocument();
   });
 
+  it('should render only the providers the backend reports', () => {
+    render(<OAuthButtons availableProviders={['github', 'unknown']} />);
+
+    expect(
+      screen.queryByRole('button', { name: /continue with google/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /continue with github/i })
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    ['undefined', undefined],
+    ['empty', []],
+    ['only unknown providers', ['facebook']],
+  ])('should render nothing when providers are %s', (_label, providers) => {
+    const { container } = render(<OAuthButtons availableProviders={providers} />);
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
   it('should disable all buttons when disabled prop is true', () => {
-    render(<OAuthButtons disabled />);
+    render(<OAuthButtons availableProviders={['google', 'github']} disabled />);
 
     const googleButton = screen.getByRole('button', {
       name: /continue with google/i,
@@ -117,7 +138,9 @@ describe('OAuthButtons', () => {
   });
 
   it('should apply custom className', () => {
-    const { container } = render(<OAuthButtons className="custom-class" />);
+    const { container } = render(
+      <OAuthButtons availableProviders={['google']} className="custom-class" />
+    );
 
     const wrapper = container.firstChild;
     expect(wrapper).toHaveClass('custom-class');

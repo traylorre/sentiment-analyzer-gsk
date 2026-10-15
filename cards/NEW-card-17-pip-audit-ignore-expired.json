@@ -1,0 +1,26 @@
+{
+  "id": "NEW",
+  "subject": "PR Checks' Dependency Vulnerability Scan has failed on every main push since three pip-audit ignores expired on 2026-09-30",
+  "activeForm": "Re-evaluating the expired mcp pip-audit ignores",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": [],
+  "origin": {
+    "introduced_by": "f289f68f",
+    "evidence": "gh run view 38453036791 --log-failed | grep EXPIRED  # then: grep -n PYSEC-2026-348 .pip-audit-ignore"
+  },
+  "runConfiguration": {
+    "work_items": [
+      "PR Checks' Dependency Vulnerability Scan has failed on every main push since three pip-audit ignores expired on 2026-09-30"
+    ],
+    "backwards_compatibility": null,
+    "security_tier": null,
+    "operational_rigour": null,
+    "audience": [
+      "maintainer"
+    ],
+    "allow_git_log": false,
+    "md_is_canonical": true
+  },
+  "description": "Found by card #17 on 2026-10-14 while checking whether CI runs. PR Checks run 38453036791 on main 8bd2a8ac fails its 'Dependency vulnerability gate (blocking)' step with three errors: pip-audit ignore for PYSEC-2026-3481, -3482 and -3483 EXPIRED on 2026-09-30. The ignores are .pip-audit-ignore:19-21, for mcp 1.23.3 pinned transitively by semgrep 1.172.0 (dev-only SAST tooling). The job is not a required status check on main (required: Secrets Scan, Lint, Run Tests, Playwright E2E Tests), so it blocks nothing and every main push shows PR Checks red. The last three main runs all fail it. Next: check whether a semgrep release now allows mcp>=1.28.1; upgrade if so, otherwise renew the three ignores with a new expiry and justification."
+}

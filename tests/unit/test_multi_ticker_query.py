@@ -241,32 +241,25 @@ class TestMultiTickerQueryPerformance:
         resolution = Resolution.FIVE_MINUTES
 
         # Time batch query
-        start = time.time()
+        # CPU time, which neither a loaded scheduler nor a clock step advances
+        start = time.process_time()
         mock_service_fast.query_batch(tickers, resolution)
-        batch_time = time.time() - start
+        batch_time = time.process_time() - start
 
-        # Time sequential queries (for comparison)
-        start = time.time()
-        for ticker in tickers:
-            mock_service_fast.query(ticker, resolution)
-        _ = time.time() - start  # sequential_time - unused but measured for comparison
-
-        # Batch should not be significantly slower than sequential
-        # (In reality, with I/O parallelism, batch would be faster)
-        # For mocked test, just verify batch completes in reasonable time
-        assert batch_time < 1.0  # Should complete in under 1 second
+        # Queries are mocked, so this bounds the batch's own work rather than I/O
+        assert batch_time < 1.0
 
     def test_query_batch_ten_tickers_under_one_second(self, mock_service_fast):
         """10 tickers should load in under 1 second (SC-006)."""
         tickers = [f"TICKER{i}" for i in range(10)]
         resolution = Resolution.FIVE_MINUTES
 
-        start = time.time()
+        start = time.process_time()
         result = mock_service_fast.query_batch(tickers, resolution)
-        elapsed = time.time() - start
+        elapsed = time.process_time() - start
 
         assert len(result) == 10
-        assert elapsed < 1.0, f"Query took {elapsed:.2f}s, expected <1s"
+        assert elapsed < 1.0, f"Query took {elapsed:.2f}s of CPU, expected <1s"
 
 
 class TestMultiTickerQueryErrorHandling:

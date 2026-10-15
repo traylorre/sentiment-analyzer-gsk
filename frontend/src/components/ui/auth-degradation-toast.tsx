@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { useAuthStore } from '@/stores/auth-store';
+import { hardNavigate } from '@/lib/utils/url';
 
 /**
  * User Story 3: Auth degradation toast notification.
@@ -26,7 +27,7 @@ export function AuthDegradationToast() {
           action: {
             label: 'Sign in again',
             onClick: () => {
-              window.location.href = '/auth/signin';
+              hardNavigate('/auth/signin');
             },
           },
           duration: Infinity,

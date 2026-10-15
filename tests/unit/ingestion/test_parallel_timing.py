@@ -1,12 +1,15 @@
-"""Unit tests for parallel execution timing.
+"""Unit tests for parallel execution.
 
-Verifies that parallel fetching is faster than sequential fetching.
+Concurrency is proved by synchronisation: each source waits for the other inside its
+fetch, which only a concurrent fetch can satisfy. An elapsed-time ceiling cannot tell a
+parallel run on a loaded host from a sequential run on an idle one.
 
 Feature 1010: Parallel Ingestion with Cross-Source Deduplication
 """
 
-import time
+import threading
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -65,112 +68,120 @@ def create_articles(source: str, count: int) -> list[NewsArticle]:
     ]
 
 
-class TestParallelTiming:
-    """Tests for parallel execution timing."""
+# Generous liveness bound: a concurrent fetch meets in microseconds, a sequential one never does
+RENDEZVOUS_TIMEOUT_S = 5.0
 
-    def test_parallel_execution_faster_than_sequential(
+
+def rendezvous(barrier, outcome, source, articles):
+    """Adapter side effect that waits for the other source inside its own fetch."""
+
+    def get_news(*args, **kwargs):
+        try:
+            barrier.wait(timeout=RENDEZVOUS_TIMEOUT_S)
+            outcome[source] = "met"
+        except threading.BrokenBarrierError:
+            outcome[source] = "alone"
+        return articles
+
+    return get_news
+
+
+def make_fetcher(tiingo, finnhub, breaker, tracker):
+    from src.lambdas.ingestion.parallel_fetcher import ParallelFetcher
+
+    return ParallelFetcher(
+        tiingo_adapter=tiingo,
+        finnhub_adapter=finnhub,
+        tiingo_breaker=breaker,
+        finnhub_breaker=breaker,
+        quota_tracker=tracker,
+    )
+
+
+class TestParallelExecution:
+    """Tests that sources are fetched concurrently."""
+
+    def test_sources_fetch_concurrently(
         self,
         mock_tiingo_adapter,
         mock_finnhub_adapter,
         mock_quota_tracker,
         mock_circuit_breaker,
     ):
-        """Parallel execution completes faster than sequential would."""
-        from src.lambdas.ingestion.parallel_fetcher import ParallelFetcher
-
-        # Simulate 100ms latency for each source
-        latency_ms = 100
-
-        def slow_tiingo(*args, **kwargs):
-            time.sleep(latency_ms / 1000)
-            return create_articles("tiingo", 5)
-
-        def slow_finnhub(*args, **kwargs):
-            time.sleep(latency_ms / 1000)
-            return create_articles("finnhub", 5)
-
-        mock_tiingo_adapter.get_news.side_effect = slow_tiingo
-        mock_finnhub_adapter.get_news.side_effect = slow_finnhub
-
-        fetcher = ParallelFetcher(
-            tiingo_adapter=mock_tiingo_adapter,
-            finnhub_adapter=mock_finnhub_adapter,
-            tiingo_breaker=mock_circuit_breaker,
-            finnhub_breaker=mock_circuit_breaker,
-            quota_tracker=mock_quota_tracker,
+        """Both sources are inside their fetch at the same time."""
+        barrier = threading.Barrier(2)
+        outcome = {}
+        mock_tiingo_adapter.get_news.side_effect = rendezvous(
+            barrier, outcome, "tiingo", create_articles("tiingo", 5)
+        )
+        mock_finnhub_adapter.get_news.side_effect = rendezvous(
+            barrier, outcome, "finnhub", create_articles("finnhub", 5)
+        )
+        fetcher = make_fetcher(
+            mock_tiingo_adapter,
+            mock_finnhub_adapter,
+            mock_circuit_breaker,
+            mock_quota_tracker,
         )
 
-        start = time.time()
         results = fetcher.fetch_all_sources(["AAPL"])
-        elapsed_ms = (time.time() - start) * 1000
 
-        # Verify results
+        assert outcome == {"tiingo": "met", "finnhub": "met"}, (
+            f"sources did not overlap, so the fetch ran sequentially: {outcome}"
+        )
         assert len(results["tiingo"]) == 5
         assert len(results["finnhub"]) == 5
 
-        # Parallel should take ~100ms (latency of slowest source)
-        # Sequential would take ~200ms (latency of both)
-        # Allow 50ms overhead for thread creation
-        max_parallel_time = latency_ms + 50
-        min_sequential_time = latency_ms * 2 - 20  # With some tolerance
-
-        assert elapsed_ms < min_sequential_time, (
-            f"Execution took {elapsed_ms:.0f}ms, appears sequential (>={min_sequential_time}ms)"
-        )
-        assert elapsed_ms < max_parallel_time, (
-            f"Execution took {elapsed_ms:.0f}ms, too slow for parallel (<{max_parallel_time}ms)"
-        )
-
-    def test_parallel_execution_with_varying_latencies(
+    def test_fast_source_completes_while_slow_source_is_in_flight(
         self,
         mock_tiingo_adapter,
         mock_finnhub_adapter,
         mock_quota_tracker,
         mock_circuit_breaker,
     ):
-        """Parallel execution handles sources with different latencies."""
-        from src.lambdas.ingestion.parallel_fetcher import ParallelFetcher
-
-        # Tiingo is fast, Finnhub is slow
-        tiingo_latency_ms = 50
-        finnhub_latency_ms = 150
+        """A slow source does not hold back a fast one."""
+        barrier = threading.Barrier(2)
+        tiingo_returned = threading.Event()
+        outcome = {}
+        tiingo_fetch = rendezvous(
+            barrier, outcome, "tiingo", create_articles("tiingo", 3)
+        )
 
         def fast_tiingo(*args, **kwargs):
-            time.sleep(tiingo_latency_ms / 1000)
-            return create_articles("tiingo", 3)
+            articles = tiingo_fetch(*args, **kwargs)
+            tiingo_returned.set()
+            return articles
 
         def slow_finnhub(*args, **kwargs):
-            time.sleep(finnhub_latency_ms / 1000)
-            return create_articles("finnhub", 3)
+            articles = rendezvous(
+                barrier, outcome, "finnhub", create_articles("finnhub", 3)
+            )()
+            outcome["tiingo_done_first"] = tiingo_returned.wait(
+                timeout=RENDEZVOUS_TIMEOUT_S
+            )
+            return articles
 
         mock_tiingo_adapter.get_news.side_effect = fast_tiingo
         mock_finnhub_adapter.get_news.side_effect = slow_finnhub
-
-        fetcher = ParallelFetcher(
-            tiingo_adapter=mock_tiingo_adapter,
-            finnhub_adapter=mock_finnhub_adapter,
-            tiingo_breaker=mock_circuit_breaker,
-            finnhub_breaker=mock_circuit_breaker,
-            quota_tracker=mock_quota_tracker,
+        fetcher = make_fetcher(
+            mock_tiingo_adapter,
+            mock_finnhub_adapter,
+            mock_circuit_breaker,
+            mock_quota_tracker,
         )
 
-        start = time.time()
         results = fetcher.fetch_all_sources(["AAPL"])
-        elapsed_ms = (time.time() - start) * 1000
 
-        # Should be dominated by slowest source + overhead
-        # Parallel: ~150ms, Sequential: ~200ms
-        max_parallel_time = finnhub_latency_ms + 50
-        assert elapsed_ms < max_parallel_time, (
-            f"Execution took {elapsed_ms:.0f}ms, expected <{max_parallel_time}ms"
-        )
-
-        # Verify both returned results
+        assert outcome == {
+            "tiingo": "met",
+            "finnhub": "met",
+            "tiingo_done_first": True,
+        }, f"the fast source did not finish while the slow one was in flight: {outcome}"
         assert len(results["tiingo"]) == 3
         assert len(results["finnhub"]) == 3
 
     @patch("src.lambdas.ingestion.parallel_fetcher.emit_metric")
-    def test_parallel_execution_with_one_source_failure(
+    def test_failing_source_does_not_block_the_other(
         self,
         mock_emit_metric,
         mock_tiingo_adapter,
@@ -178,43 +189,35 @@ class TestParallelTiming:
         mock_quota_tracker,
         mock_circuit_breaker,
     ):
-        """Parallel execution completes quickly even when one source fails."""
-        from src.lambdas.ingestion.parallel_fetcher import ParallelFetcher
+        """A source that fails mid-fetch does not hold back the source still running."""
+        finnhub_failed = threading.Event()
+        outcome = {}
 
-        latency_ms = 100
-
-        def slow_tiingo(*args, **kwargs):
-            time.sleep(latency_ms / 1000)
+        def tiingo_outlasting_finnhub(*args, **kwargs):
+            outcome["saw_finnhub_fail"] = finnhub_failed.wait(
+                timeout=RENDEZVOUS_TIMEOUT_S
+            )
             return create_articles("tiingo", 5)
 
         def failing_finnhub(*args, **kwargs):
-            time.sleep(20 / 1000)  # Fast failure
+            finnhub_failed.set()
             raise Exception("Finnhub error")
 
-        mock_tiingo_adapter.get_news.side_effect = slow_tiingo
+        mock_tiingo_adapter.get_news.side_effect = tiingo_outlasting_finnhub
         mock_finnhub_adapter.get_news.side_effect = failing_finnhub
-
-        fetcher = ParallelFetcher(
-            tiingo_adapter=mock_tiingo_adapter,
-            finnhub_adapter=mock_finnhub_adapter,
-            tiingo_breaker=mock_circuit_breaker,
-            finnhub_breaker=mock_circuit_breaker,
-            quota_tracker=mock_quota_tracker,
+        fetcher = make_fetcher(
+            mock_tiingo_adapter,
+            mock_finnhub_adapter,
+            mock_circuit_breaker,
+            mock_quota_tracker,
         )
 
-        start = time.time()
         results = fetcher.fetch_all_sources(["AAPL"])
-        elapsed_ms = (time.time() - start) * 1000
 
-        # Should still complete in parallel time (not blocked by failure)
-        max_time = latency_ms + 50
-        assert elapsed_ms < max_time, (
-            f"Execution took {elapsed_ms:.0f}ms, failure blocked parallel execution"
+        assert outcome == {"saw_finnhub_fail": True}, (
+            "Tiingo was not in flight when Finnhub failed, so the fetch ran sequentially"
         )
-
-        # Tiingo should succeed
         assert len(results["tiingo"]) == 5
-        # Finnhub should be empty
         assert results["finnhub"] == []
 
     def test_duration_ms_metric_is_accurate(
@@ -223,78 +226,61 @@ class TestParallelTiming:
         mock_finnhub_adapter,
         mock_quota_tracker,
         mock_circuit_breaker,
+        monkeypatch,
     ):
-        """duration_ms metric accurately reflects actual execution time."""
-        from src.lambdas.ingestion.parallel_fetcher import ParallelFetcher
+        """duration_ms is the difference between the fetch's start and end readings."""
+        import src.lambdas.ingestion.parallel_fetcher as fetcher_module
 
-        latency_ms = 75
-
-        def slow_response(*args, **kwargs):
-            time.sleep(latency_ms / 1000)
-            return create_articles("test", 2)
-
-        mock_tiingo_adapter.get_news.side_effect = slow_response
-        mock_finnhub_adapter.get_news.side_effect = slow_response
-
-        fetcher = ParallelFetcher(
-            tiingo_adapter=mock_tiingo_adapter,
-            finnhub_adapter=mock_finnhub_adapter,
-            tiingo_breaker=mock_circuit_breaker,
-            finnhub_breaker=mock_circuit_breaker,
-            quota_tracker=mock_quota_tracker,
+        readings = iter([1000.0, 1000.25])
+        monkeypatch.setattr(
+            fetcher_module, "time", SimpleNamespace(time=lambda: next(readings))
+        )
+        mock_tiingo_adapter.get_news.return_value = create_articles("tiingo", 2)
+        mock_finnhub_adapter.get_news.return_value = create_articles("finnhub", 2)
+        fetcher = make_fetcher(
+            mock_tiingo_adapter,
+            mock_finnhub_adapter,
+            mock_circuit_breaker,
+            mock_quota_tracker,
         )
 
-        external_start = time.time()
         fetcher.fetch_all_sources(["AAPL"])
-        external_elapsed_ms = (time.time() - external_start) * 1000
 
-        metrics = fetcher.get_metrics()
+        assert fetcher.get_metrics()["duration_ms"] == 250.0
 
-        # Internal duration should match external measurement (within tolerance)
-        assert abs(metrics["duration_ms"] - external_elapsed_ms) < 20
-
-    def test_parallel_execution_scales_with_tickers(
+    def test_one_call_per_source_whatever_the_ticker_count(
         self,
         mock_tiingo_adapter,
         mock_finnhub_adapter,
         mock_quota_tracker,
         mock_circuit_breaker,
     ):
-        """Parallel execution time doesn't increase linearly with tickers."""
-        from src.lambdas.ingestion.parallel_fetcher import ParallelFetcher
-
-        latency_ms = 50
-
-        def constant_latency_tiingo(*args, **kwargs):
-            time.sleep(latency_ms / 1000)
-            return create_articles("tiingo", 10)
-
-        def constant_latency_finnhub(*args, **kwargs):
-            time.sleep(latency_ms / 1000)
-            return create_articles("finnhub", 10)
-
-        mock_tiingo_adapter.get_news.side_effect = constant_latency_tiingo
-        mock_finnhub_adapter.get_news.side_effect = constant_latency_finnhub
-
-        fetcher = ParallelFetcher(
-            tiingo_adapter=mock_tiingo_adapter,
-            finnhub_adapter=mock_finnhub_adapter,
-            tiingo_breaker=mock_circuit_breaker,
-            finnhub_breaker=mock_circuit_breaker,
-            quota_tracker=mock_quota_tracker,
+        """Each source is called once with every ticker, concurrently, at any ticker count."""
+        fetcher = make_fetcher(
+            mock_tiingo_adapter,
+            mock_finnhub_adapter,
+            mock_circuit_breaker,
+            mock_quota_tracker,
         )
 
-        # Test with different ticker counts
         for ticker_count in [1, 5, 10]:
             tickers = [f"TICK{i}" for i in range(ticker_count)]
-
-            start = time.time()
-            fetcher.fetch_all_sources(tickers)
-            elapsed_ms = (time.time() - start) * 1000
-
-            # Should still be parallel time regardless of ticker count
-            # (assuming adapters handle all tickers in one call)
-            max_time = latency_ms + 50
-            assert elapsed_ms < max_time, (
-                f"{ticker_count} tickers took {elapsed_ms:.0f}ms, expected <{max_time}ms"
+            barrier = threading.Barrier(2)
+            outcome = {}
+            mock_tiingo_adapter.get_news.reset_mock()
+            mock_finnhub_adapter.get_news.reset_mock()
+            mock_tiingo_adapter.get_news.side_effect = rendezvous(
+                barrier, outcome, "tiingo", create_articles("tiingo", 10)
             )
+            mock_finnhub_adapter.get_news.side_effect = rendezvous(
+                barrier, outcome, "finnhub", create_articles("finnhub", 10)
+            )
+
+            fetcher.fetch_all_sources(tickers)
+
+            assert outcome == {"tiingo": "met", "finnhub": "met"}, (
+                f"{ticker_count} tickers: sources did not overlap: {outcome}"
+            )
+            for adapter in (mock_tiingo_adapter, mock_finnhub_adapter):
+                adapter.get_news.assert_called_once()
+                assert adapter.get_news.call_args.kwargs["tickers"] == tickers

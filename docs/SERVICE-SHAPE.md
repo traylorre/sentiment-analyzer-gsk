@@ -76,7 +76,7 @@ The dashboard Lambda has **no Function URL** (`create_function_url = false` at
 only one with a Function URL, in `RESPONSE_STREAM` mode (`main.tf:824`).
 
 There are two separate dashboards with different stacks, different URLs, and different routes.
-Confusing them has caused repeated incidents; the comparison table in `CLAUDE.md` is the reference
+Confusing them has caused repeated incidents; the comparison table in `AGENTS.md` is the reference
 and should be checked before writing any dashboard code or test.
 
 ## Output schema

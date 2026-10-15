@@ -372,9 +372,8 @@ WI-3's backend half.
   already exist as placeholders; the tfvars line and apply are owner-approved
   actions. Anything beyond that (new tables, new Lambdas, new queues) needs an
   explicit ask. WI-3's backend Set-Cookie change modifies an existing Lambda only.
-- **No pushes to remote until the work is green locally.** Pre-push checklist per
-  CLAUDE.md (security alerts, `make validate`, unit tests) still applies when a
-  push does happen.
+- **No pushes to remote until the work is green locally.** Before a push, run
+  `make check-security-alerts`, `make validate` and the unit tests.
 - **All verification targets the CUSTOMER dashboard** on Amplify
   (`https://main.d29tlmksqcx494.amplifyapp.com/`), never the Lambda HTMX admin
   dashboard. Every manifest entry carries the `target` field so mock or admin

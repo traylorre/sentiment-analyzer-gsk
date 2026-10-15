@@ -73,12 +73,14 @@ function filterMotionProps(props: Record<string, unknown>): Record<string, unkno
 
 // Create a motion component mock for a given element type
 function createMotionComponent(Element: string) {
-  return React.forwardRef<HTMLElement, React.PropsWithChildren<Record<string, unknown>>>(
+  const Component = React.forwardRef<HTMLElement, React.PropsWithChildren<Record<string, unknown>>>(
     ({ children, ...props }, ref) => {
       const filteredProps = filterMotionProps(props);
       return React.createElement(Element, { ...filteredProps, ref }, children as React.ReactNode);
     }
   );
+  Component.displayName = `motion.${Element}`;
+  return Component;
 }
 
 // Export the mock object

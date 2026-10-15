@@ -3,7 +3,7 @@
 > **CANON**: verified against code.
 
 What the service actually emits, and the rules that bind changes to it. Architecture is in
-`docs/SERVICE-SHAPE.md`; the two dashboards are distinguished in `CLAUDE.md`. Tracing is in
+`docs/SERVICE-SHAPE.md`; the two dashboards are distinguished in `AGENTS.md`. Tracing is in
 `docs/x-ray.md`.
 
 ## Metric namespaces
@@ -51,7 +51,7 @@ emitter for the current list rather than copying one from a spec.
 There are none. Every alarm this stack owned was deleted on 2026-08-06 to stop billing past the
 10-alarm CloudWatch free tier, of which 8 slots are taken by the unrelated `dev-loop` stack in
 the same account. The definitions last exist at main commit `d7547e1e`; recovery path and
-preconditions are in `specs/001-alarm-restore/card.md`. The register below is what was removed
+preconditions are in card #7, `cards/7.json`. The register below is what was removed
 and the state each alarm was in at deletion. When alarms return they are Terraform, not code,
 and adding a metric does not create an alarm for it.
 

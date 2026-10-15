@@ -132,7 +132,7 @@ def _get_cached_ohlc(cache_key: str, resolution: str) -> dict | None:
             effective_ttl = entry[2]
         else:
             effective_ttl = OHLC_CACHE_TTLS.get(resolution, OHLC_CACHE_DEFAULT_TTL)
-        if time.time() - timestamp < effective_ttl:
+        if time.monotonic() - timestamp < effective_ttl:
             _ohlc_cache_stats["hits"] += 1
             _ohlc_cw_stats.record_hit()
             return response
@@ -160,7 +160,7 @@ def _set_cached_ohlc(cache_key: str, response: dict, resolution: str = "D") -> N
         del _ohlc_cache[oldest_key]
         _ohlc_cache_stats["evictions"] += 1
     base_ttl = OHLC_CACHE_TTLS.get(resolution, OHLC_CACHE_DEFAULT_TTL)
-    _ohlc_cache[cache_key] = (time.time(), response, jittered_ttl(base_ttl))
+    _ohlc_cache[cache_key] = (time.monotonic(), response, jittered_ttl(base_ttl))
 
 
 def get_ohlc_cache_stats() -> dict[str, int]:
@@ -644,7 +644,7 @@ def get_ohlc_data(ticker: str) -> Response:
         )
         # Calculate in-memory cache age
         if cache_key in _ohlc_cache:
-            cache_age = int(time.time() - _ohlc_cache[cache_key][0])
+            cache_age = int(time.monotonic() - _ohlc_cache[cache_key][0])
         cache_headers = _build_cache_headers("in-memory", cache_age, None, False)
         # Return cached OHLCResponse directly
         return Response(

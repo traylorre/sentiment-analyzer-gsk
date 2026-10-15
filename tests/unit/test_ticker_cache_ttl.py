@@ -92,7 +92,7 @@ def _force_expire_cache():
         if mod._ticker_cache_entry is not None:
             _, cache, etag, ttl = mod._ticker_cache_entry
             # Set loaded_at to 1000s in the past (well past any TTL)
-            mod._ticker_cache_entry = (time.time() - 1000, cache, etag, ttl)
+            mod._ticker_cache_entry = (time.monotonic() - 1000, cache, etag, ttl)
 
 
 class TestTickerCacheTTLRefresh:

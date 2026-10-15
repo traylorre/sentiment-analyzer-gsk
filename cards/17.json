@@ -1,0 +1,27 @@
+{
+  "id": "17",
+  "subject": "No CI job runs the frontend's vitest, eslint or build, and on main vitest has 22 failing tests and eslint 29 errors",
+  "activeForm": "Putting the frontend's unit tests, lint and build under CI",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": [],
+  "origin": {
+    "introduced_by": "pre-existing",
+    "evidence": "grep -l 'vitest\\|npm run lint\\|npm run build\\|npm test' .github/workflows/*.yml  # prints nothing; then cd frontend && npx vitest run --testTimeout=30000 && npx eslint ."
+  },
+  "runConfiguration": {
+    "work_items": [
+      "Card #17: diagnose and fix the 22 failing frontend unit tests and 29 lint errors, then add a CI job running frontend vitest, eslint and build"
+    ],
+    "backwards_compatibility": "none. Lint fixes refactor React components and hooks without changing user-visible behaviour or any API contract.",
+    "security_tier": "S1. Auth components (oauth-buttons, callback, user-menu) are touched for test and lint fixes only; no auth behaviour changes.",
+    "operational_rigour": "standard. Every fixed test failure carries a named cause; the new CI job is proven to go red on a deliberate break before it counts. Preprod verification only if the oauth-buttons cause is shown to be the preprod auth.spec.ts:24 failure. Operator approved making the frontend job a required status check on main once it runs green on this card's PR.",
+    "audience": [
+      "maintainer"
+    ],
+    "allow_git_log": false,
+    "md_is_canonical": true
+  },
+  "description": "Found by card #15 while baselining a dependency update (specs/1403-dependabot-alert-backlog/baseline.md lists the 22 tests).\n\nMEASURED 2026-10-10 on main 38f5a225, Node 20.20.2 (the Node Amplify builds with): npx vitest run --testTimeout=30000 gives 22 failed, 620 passed (642), all in auth (callback, oauth-buttons, user-menu), use-tier-upgrade and broadcast-channel tests. npx eslint . gives 29 errors and 1 warning, most from react-hooks rules (set-state-in-effect, refs during render, impure calls during render). Build and typecheck pass. No workflow runs any of the four, which is how this sits on main.\n\nUnder vitest's 5000 ms default timeout the failing set varies by run: one to two extra tests that take about 5 s fail each time. That is a measured cause (timeout under load), and the fix belongs with this card: raise the timeout or make those tests cheaper.\n\nAfter card #15 moves eslint-config-next to 16.4.0, its new rule @next/next/no-location-assign-relative-destination adds 4 warnings on code that predates the bump: src/components/auth/sign-out-dialog.tsx:35, src/components/ui/auth-degradation-toast.tsx:29, src/components/ui/error-boundary.tsx:43, src/lib/api/errors.ts:45.\n\nThe oauth-buttons failures may share a cause with the preprod Amplify failure auth.spec.ts:24 'should show OAuth buttons' (deploy run 38086859278). Unmeasured.",
+  "specNumber": 1405
+}
