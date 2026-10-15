@@ -2,9 +2,17 @@
 # Check for orphaned remote branches before push
 #
 # This hook prevents branch name collisions and orphaned branches by:
-# 1. Checking if the current branch already exists on remote
+# 1. Checking if the branch being pushed already exists on remote
 # 2. If it does, verifying there's an associated PR
 # 3. If no PR exists, warning about potential orphan
+#
+# The branch judged is the push's remote ref. pre-commit's pre-push stage
+# consumes git's stdin and exports that ref as PRE_COMMIT_REMOTE_BRANCH, for
+# the first ref carrying commits the remote lacks. Run by hand, the
+# checked-out branch stands in.
+#
+# card-<n> branches are Hydrostat claim refs: one exists on the remote for
+# every live card and never has a PR.
 #
 # Part of 143-orphan-branch-prevention initiative.
 #
@@ -18,16 +26,32 @@
 
 set -euo pipefail
 
-# Get current branch name
-BRANCH=$(git rev-parse --abbrev-ref HEAD)
+REMOTE="${PRE_COMMIT_REMOTE_NAME:-origin}"
+
+if [[ -n "${PRE_COMMIT_REMOTE_BRANCH:-}" ]]; then
+    case "$PRE_COMMIT_REMOTE_BRANCH" in
+        refs/heads/*) BRANCH="${PRE_COMMIT_REMOTE_BRANCH#refs/heads/}" ;;
+        *)
+            echo "✓ '$PRE_COMMIT_REMOTE_BRANCH' is not a branch - nothing to check"
+            exit 0
+            ;;
+    esac
+else
+    BRANCH=$(git rev-parse --abbrev-ref HEAD)
+fi
 
 # Skip check for main/master branches
 if [[ "$BRANCH" == "main" || "$BRANCH" == "master" ]]; then
     exit 0
 fi
 
+if [[ "$BRANCH" =~ ^card-[0-9]+$ ]]; then
+    echo "✓ '$BRANCH' is a Hydrostat claim ref - safe to push"
+    exit 0
+fi
+
 # Check if branch exists on remote
-REMOTE_EXISTS=$(git ls-remote --heads origin "$BRANCH" 2>/dev/null | wc -l)
+REMOTE_EXISTS=$(git ls-remote "$REMOTE" "refs/heads/$BRANCH" 2>/dev/null | wc -l)
 
 if [ "$REMOTE_EXISTS" -eq 0 ]; then
     # Branch doesn't exist on remote - new branch, safe to push
@@ -55,7 +79,7 @@ if [ "$PR_COUNT" -eq 0 ]; then
     echo ""
     echo "To fix:"
     echo "  Option 1: Delete the remote orphan and push"
-    echo "    git push origin --delete $BRANCH"
+    echo "    git push $REMOTE --delete $BRANCH"
     echo "    git push -u origin HEAD"
     echo ""
     echo "  Option 2: Use a different branch name"

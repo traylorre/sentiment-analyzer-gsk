@@ -1,0 +1,16 @@
+{
+  "status": "done",
+  "safe_to_teardown": true,
+  "card_after": "DONE",
+  "summary": "scripts/check-branch-collision.sh judges the pushed ref from PRE_COMMIT_REMOTE_BRANCH, falls back to the checked-out branch on a manual run, passes card-<n> claim refs and tags, and matches refs/heads/<branch> exactly. tests/unit/scripts/test_check_branch_collision.py: 9 tests on real git against a scratch bare origin with gh stubbed, one of them a real git push through real pre-commit using the repo's own hook definition. Mutant: 8 of 9 fail against the original script; the passing one is the manual run on an orphan, the behaviour kept by the operator's backwards_compatibility answer.",
+  "evidence": [
+    "Before: SKIP=pytest git push --dry-run origin HEAD:refs/heads/card-22-collision-probe from this worktree printed ORPHAN BRANCH DETECTED for card-22",
+    "pytest tests/unit/scripts/test_check_branch_collision.py: 9 passed, also with GIT_DIR and GIT_WORK_TREE exported as a linked worktree's pre-push does; core.bare stayed false",
+    "make validate after the land gate's terraform init: all 8 blocking stages PASS"
+  ],
+  "for_the_board": [
+    "Remove card #22 from goal.json's priority order and READY list. Pushes from a card worktree to any non-orphan branch now pass check-branch-collision; the temporary-worktree workaround card #17 used is no longer needed.",
+    "The root checkout's .venv has pre-commit 4.5.1 while requirements-dev.txt and requirements-ci.txt pin 4.6.2. Host venv drift, not a repo defect; a pip install -r requirements-dev.txt in the root checkout repairs it.",
+    "A global improve drop was filed: pre-commit's pre-push stage hides git's stdin from hooks and exports PRE_COMMIT_REMOTE_BRANCH for one ref only."
+  ]
+}
