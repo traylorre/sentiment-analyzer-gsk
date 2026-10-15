@@ -11,6 +11,7 @@
 #
 # For Developers:
 #   - Run locally: make validate && make test-unit
+#   - Frontend: cd frontend && npm run lint -- --max-warnings=0 && npm run typecheck && npm test && npm run build
 #   - Fix lint: ruff format src/ tests/ && ruff check src/ tests/ --fix
 
 name: PR Checks
@@ -200,6 +201,58 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           MINIMUM_GREEN: 80
           MINIMUM_ORANGE: 60
+
+  # ========================================================================
+  # JOB: Frontend checks (eslint, tsc, vitest, next build)
+  # ========================================================================
+  frontend:
+    name: Frontend Checks
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: 'frontend/.nvmrc'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        id: install
+        run: npm ci
+
+      # Each check runs whenever the install succeeded, so one failure
+      # cannot hide another; any failed step still fails the job.
+      - name: Lint (eslint, warnings fail)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run lint -- --max-warnings=0
+
+      - name: Typecheck (tsc)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run typecheck
+
+      - name: Unit tests (vitest)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm test
+
+      - name: Build (next build)
+        if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: npm run build
+
+    timeout-minutes: 20
 
   # ========================================================================
   # JOB 3: Security (pip-audit)
