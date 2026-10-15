@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -67,6 +68,27 @@ describe('OAuth Callback Page', () => {
       await waitFor(() => {
         expect(screen.getByText(/completing sign in/i)).toBeInTheDocument();
       });
+    });
+  });
+
+  describe('StrictMode', () => {
+    it('should process the callback once when effects run twice', async () => {
+      setSearchParams({ code: 'auth_code_123', state: 'valid_state' });
+      sessionStorage.setItem('oauth_provider', 'google');
+      sessionStorage.setItem('oauth_state', 'valid_state');
+      mockHandleCallback.mockImplementation(() => new Promise(() => {})); // Never resolves
+
+      await act(async () => {
+        render(
+          <StrictMode>
+            <CallbackPage />
+          </StrictMode>
+        );
+      });
+
+      expect(mockHandleCallback).toHaveBeenCalledTimes(1);
+      expect(screen.getByText(/completing sign in/i)).toBeInTheDocument();
+      expect(screen.queryByText(/session expired/i)).not.toBeInTheDocument();
     });
   });
 

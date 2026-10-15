@@ -1,0 +1,26 @@
+{
+  "id": "NEW",
+  "subject": "The alert form wipes what the user typed whenever the alerts page re-renders, because useConfigs returns a freshly filtered array each render",
+  "activeForm": "Stopping the alert form from resetting on parent re-renders",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": [],
+  "origin": {
+    "introduced_by": "pre-existing",
+    "evidence": "grep -n 'visibleConfigurations' frontend/src/hooks/use-configs.ts; grep -n 'formInputs.configurations !== configurations' frontend/src/components/dashboard/alert-form.tsx"
+  },
+  "runConfiguration": {
+    "work_items": [
+      "Stop AlertForm resetting user input when its parent re-renders"
+    ],
+    "backwards_compatibility": null,
+    "security_tier": null,
+    "operational_rigour": null,
+    "audience": [
+      "maintainer"
+    ],
+    "allow_git_log": false,
+    "md_is_canonical": true
+  },
+  "description": "Found by card #17 on 2026-10-14 while moving AlertForm's reset out of an effect. The form re-initializes its fields whenever its configurations prop changes identity (frontend/src/components/dashboard/alert-form.tsx, the formInputs comparison; before card #17 the same dependency sat in a useEffect). useConfigs returns configurations as configurations.filter(...) (frontend/src/hooks/use-configs.ts:130-136), a new array on every render of the alerts page. So any re-render of the alerts page while the form is open, such as a react-query refetch on window focus, resets the form to its initial values and drops what the user entered. Card #17 preserved the behaviour deliberately rather than change it inside a lint fix. Unmeasured in a browser. Likely fix: compare configurations by content (or by the ids it offers), or memoise visibleConfigurations in useConfigs; add a test that re-renders AlertForm with an equal but new configurations array and expects user input kept."
+}

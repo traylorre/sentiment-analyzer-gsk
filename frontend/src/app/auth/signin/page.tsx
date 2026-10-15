@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { LayoutDashboard } from 'lucide-react';
 import { MagicLinkForm } from '@/components/auth/magic-link-form';
@@ -129,12 +130,12 @@ export default function SignInPage() {
 
         {/* Anonymous option */}
         <div className="text-center mt-4">
-          <a
+          <Link
             href="/"
             className="text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             Continue as guest
-          </a>
+          </Link>
         </div>
       </motion.div>
     </div>

@@ -13,14 +13,12 @@ function VerifyContent() {
   const router = useRouter();
   const { verifyToken, isLoading, error } = useAuth();
 
-  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const [verifyStatus, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const token = searchParams.get('token');
+  const status = token ? verifyStatus : 'error';
 
   useEffect(() => {
-    if (!token) {
-      setStatus('error');
-      return;
-    }
+    if (!token) return;
 
     const verify = async () => {
       try {
