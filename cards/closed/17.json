@@ -1,0 +1,48 @@
+{
+  "id": "17",
+  "closed": "2026-10-15T03:01:34Z",
+  "source": "close",
+  "landing": "2413cd969863f462671299c40440d4b42828e94a",
+  "gaps": [],
+  "card": {
+    "id": "17",
+    "subject": "No CI job runs the frontend's vitest, eslint or build, and on main vitest has 22 failing tests and eslint 29 errors",
+    "activeForm": "Putting the frontend's unit tests, lint and build under CI",
+    "status": "pending",
+    "blocks": [],
+    "blockedBy": [],
+    "origin": {
+      "introduced_by": "pre-existing",
+      "evidence": "grep -l 'vitest\\|npm run lint\\|npm run build\\|npm test' .github/workflows/*.yml  # prints nothing; then cd frontend && npx vitest run --testTimeout=30000 && npx eslint ."
+    },
+    "runConfiguration": {
+      "work_items": [
+        "Card #17: diagnose and fix the 22 failing frontend unit tests and 29 lint errors, then add a CI job running frontend vitest, eslint and build"
+      ],
+      "backwards_compatibility": "none. Lint fixes refactor React components and hooks without changing user-visible behaviour or any API contract.",
+      "security_tier": "S1. Auth components (oauth-buttons, callback, user-menu) are touched for test and lint fixes only; no auth behaviour changes.",
+      "operational_rigour": "standard. Every fixed test failure carries a named cause; the new CI job is proven to go red on a deliberate break before it counts. Preprod verification only if the oauth-buttons cause is shown to be the preprod auth.spec.ts:24 failure. Operator approved making the frontend job a required status check on main once it runs green on this card's PR.",
+      "audience": [
+        "maintainer"
+      ],
+      "allow_git_log": false,
+      "md_is_canonical": true
+    },
+    "description": "Found by card #15 while baselining a dependency update (specs/1403-dependabot-alert-backlog/baseline.md lists the 22 tests).\n\nMEASURED 2026-10-10 on main 38f5a225, Node 20.20.2 (the Node Amplify builds with): npx vitest run --testTimeout=30000 gives 22 failed, 620 passed (642), all in auth (callback, oauth-buttons, user-menu), use-tier-upgrade and broadcast-channel tests. npx eslint . gives 29 errors and 1 warning, most from react-hooks rules (set-state-in-effect, refs during render, impure calls during render). Build and typecheck pass. No workflow runs any of the four, which is how this sits on main.\n\nUnder vitest's 5000 ms default timeout the failing set varies by run: one to two extra tests that take about 5 s fail each time. That is a measured cause (timeout under load), and the fix belongs with this card: raise the timeout or make those tests cheaper.\n\nAfter card #15 moves eslint-config-next to 16.4.0, its new rule @next/next/no-location-assign-relative-destination adds 4 warnings on code that predates the bump: src/components/auth/sign-out-dialog.tsx:35, src/components/ui/auth-degradation-toast.tsx:29, src/components/ui/error-boundary.tsx:43, src/lib/api/errors.ts:45.\n\nThe oauth-buttons failures may share a cause with the preprod Amplify failure auth.spec.ts:24 'should show OAuth buttons' (deploy run 38086859278). Unmeasured.",
+    "specNumber": 1405
+  },
+  "status": {
+    "status": "done",
+    "safe_to_teardown": true,
+    "card_after": "DONE",
+    "summary": "PR Checks runs the frontend's eslint (--max-warnings=0), tsc, vitest and next build as the Frontend Checks job; run 38667285857 on PR #1057 passed it (665 tests), and the deliberate break in run 38668088048 failed all four steps, each reported. The 22 failing tests had five causes, none in product code (Vitest 4 constructor mocks, stale auth tests, a mock missing getState, a stub applied after module load). eslint went from 29 errors and 5 warnings to 0 and 0 by fixing code, with two targeted disables; three real defects fixed with tests that fail on the old code (OAuth callback under StrictMode, price-chart tooltip resolution, delayed aria-live freshness announcement). The configs-page sparkline, which drew random points, is removed; five never-imported modules are deleted. make validate passes 8 of 8 blocking stages; make test-unit passes 4259 of 4259. Spec: specs/1405-frontend-ci-gate/spec.md.",
+    "for_the_board": [
+      "Remove #17 from cards/goal.json: priority item 2 and the READY list.",
+      "After landing, make 'Frontend Checks' a required status check on main (operator approved, recorded in cards/17.json runConfiguration): gh api -X POST repos/traylorre/sentiment-analyzer-gsk/branches/main/protection/required_status_checks/contexts -f 'contexts[]=Frontend Checks'. Not done before landing because main's workflow does not define the job yet, so every open PR would wait on it.",
+      "After landing, close draft PR #1057 and delete its branch: gh pr close 1057 --delete-branch; then rm -rf /tmp/card17-clone and git branch -D card-17-frontend-ci in the root checkout.",
+      "Rank first after #17, as Helios said: cards/NEW-card-17-pre-push-flips-core-bare.json. A push from any linked worktree sets core.bare=true in the shared repository (twice in this run); until it lands, push only from a standalone clone or the root checkout.",
+      "Number and place: cards/NEW-card-17-branch-collision-claim-ref.json (the collision pre-push hook refuses every push from a card worktree), cards/NEW-card-17-pip-audit-ignore-expired.json and cards/NEW-card-17-detect-secrets-closed-cards.json (two non-required PR Checks jobs red on every main push), cards/NEW-card-17-alert-form-reset-on-rerender.json and cards/NEW-card-17-session-expiry-message-lost.json (frontend defects found while refactoring; both carry an unmeasured-in-browser note).",
+      "The preprod auth.spec.ts:24 'should show OAuth buttons' failure does not share the unit tests' cause: the unit tests were stale, while the page shows buttons only when /api/v2/auth/oauth/urls returns providers (frontend/src/app/auth/signin/page.tsx). The preprod failure remains unexplained and uncarded."
+    ]
+  }
+}
