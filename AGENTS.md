@@ -6,8 +6,7 @@ Repo-specific knowledge that is hard to derive from the code. Rules that bind ch
 This file does not restate what a source file already states. Restated facts drift and give no
 signal that they have drifted; a pointer cannot. It extends the host-global House Rules
 (`~/.pi/agent/AGENTS.md`), which pi loads on every turn, rather than replacing them, so what holds
-on this host regardless of repo stays there. `CLAUDE.md` is a pointer at this file so both harnesses
-read one copy.
+on this host regardless of repo stays there.
 
 ## CRITICAL: Two Dashboards
 
@@ -33,7 +32,7 @@ Rules:
 
 Three traps in that table. There is **no HTMX** in the admin dashboard despite the header string
 saying so; the string is historical and dozens of test files carry it. The
-`check-test-target-headers` gate (`Makefile:124`) greps only
+`check-test-target-headers` gate (`Makefile:125`) greps only
 `Target:.*(Dashboard|Infrastructure)`, so the wording after that is convention, not enforcement. Second, the dashboard Lambda has no Function
 URL; it is reached through API Gateway. Third, **routes do not discriminate**: both dashboards are
 served by `src/lambdas/dashboard/handler.py` and their route sets overlap, so the API row above is
@@ -71,10 +70,10 @@ Python work needs the venv, which is 3.13 while system Python is not:
 ## Gotchas that cost real time
 
 - **`make validate` does not rewrite your working tree.** Its first stage is `fmt-check`
-  (`Makefile:85`), not `fmt`. The mutating `fmt` target still exists (`Makefile:138`) and nothing
+  (`Makefile:81`), not `fmt`. The mutating `fmt` target still exists (`Makefile:139`) and nothing
   in `validate` calls it. `make -n validate` is refused outright, because `-n` propagates to the
   sub-makes and every stage would report success without running.
-- **Semgrep is the only security scanner that gates.** `pip-audit` (`Makefile:161`) ends in
+- **Semgrep is the only security scanner that gates.** `pip-audit` (`Makefile:162`) ends in
   `|| true`, so a green run is no evidence it found nothing. The `security` stage that carries
   `pip-audit` is declared ADVISORY in the driver, so it cannot fail the run even in principle.
   Every other stage is BLOCKING; the `run_stage` lines in the validate driver
@@ -82,14 +81,13 @@ Python work needs the venv, which is 3.13 while system Python is not:
   them and reports each before failing, so one broken stage cannot hide the ones behind it.
 - **SSE handler tests** need `make_function_url_event()` and `parse_streaming_response()` from
   `tests/conftest.py`. A hand-built API Gateway event returns 404 and reads as a routing bug.
-- **Checking security alerts before a push:** filtering `state` client-side returns 0, because the
-  default page is truncated. Query server-side instead:
-
-  ```bash
-  gh api 'repos/traylorre/sentiment-analyzer-gsk/code-scanning/alerts?state=open&per_page=100' --jq length
-  ```
-
-  CI green is not the same as no open alerts.
+- **Checking security alerts before a push:** run `make check-security-alerts`. It reads every
+  page of both code scanning and Dependabot alerts and ends with a `VERDICT:` line: `CLEAN`,
+  `FINDINGS`, or `COULD-NOT-DETERMINE`. `make` reports both failures as exit 2, so read the line.
+  Do not hand-roll a `gh api` query in its place: `--paginate --jq` applies the
+  filter once per page, and a one-page read prints a plausible number. It is not in
+  `make validate` because it needs network and `gh` auth. CI green is not the same as no open
+  alerts.
 - **Push and open the PR in one step** or the branch orphans:
   `git push -u origin HEAD && gh pr create --fill`. The `check-branch-collision` pre-push hook
   catches orphans that slip through.
@@ -103,6 +101,14 @@ Python work needs the venv, which is 3.13 while system Python is not:
   version at `src/lambdas/shared/utils/dedup.py:11` also hashes source and is **not** on the live
   path, despite living under `shared/` with the fuller docstring. Reading either file alone gives
   you the wrong answer.
+- **A red `test-preprod` is the deploy gate working, until proven otherwise.** Before 2026-09-22 that
+  job could not fail: all 16 sanity tests skipped, the exit code captured was `tee`'s, the computed
+  result was never read, and `deploy.yml` ended in an unconditional `exit 0`. Card 8 closed all four
+  layers, and those 16 tests have still never once executed against preprod. So the first failure
+  they produce is most likely the gate reporting something that was always true and previously
+  hidden, not a regression the change introduced. **Diagnose the reported failure before reverting
+  the gate.** Reverting restores a job that certifies every deploy green, which is the state a real
+  bug (missing OAuth buttons) already shipped through.
 
 ## Active Technologies
 
@@ -146,7 +152,7 @@ Flares), the stages, and what each transition requires. Use its names. Nothing h
   inherits it. A run that writes its own evidence into the tree it measures states every census as
   of a fixed commit.
 - Cards are deleted when their work completes, except the quarrysome closeout
-  (`specs/001-quarrysome-promotion/`), which stays open by standing operator decision until its work
+  (card #11, `cards/11.json`), which stays open by standing operator decision until its work
   items land. History in the pull request is the archive.
 - A Dynamo claiming the work is finished attests in `cards/<id>.status.json` committed on its
   branch: `status` done, `safe_to_teardown` true, `card_after` DONE when nothing remains or OPEN

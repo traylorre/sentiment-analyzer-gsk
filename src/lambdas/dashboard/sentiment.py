@@ -80,7 +80,7 @@ def _get_cached_sentiment(cache_key: str) -> "SentimentResponse | None":
         timestamp, response = entry[0], entry[1]
         # Feature 1224: Use jittered TTL if stored
         effective_ttl = entry[2] if len(entry) > 2 else SENTIMENT_CACHE_TTL
-        if time.time() - timestamp < effective_ttl:
+        if time.monotonic() - timestamp < effective_ttl:
             _sentiment_cache_stats["hits"] += 1
             _sentiment_cw_stats.record_hit()
             return response
@@ -101,7 +101,7 @@ def _set_cached_sentiment(cache_key: str, response: "SentimentResponse") -> None
         oldest_key = min(_sentiment_cache.keys(), key=lambda k: _sentiment_cache[k][0])
         del _sentiment_cache[oldest_key]
     _sentiment_cache[cache_key] = (
-        time.time(),
+        time.monotonic(),
         response,
         jittered_ttl(SENTIMENT_CACHE_TTL),
     )

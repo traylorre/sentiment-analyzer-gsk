@@ -145,6 +145,8 @@ export function PriceSentimentChart({
   const [sentimentSource, setSentimentSource] = useState<ChartSentimentSource>(initialSentimentSource);
   const [showCandles, setShowCandles] = useState(true);
   const [showSentiment, setShowSentiment] = useState(true);
+  // The crosshair handler outlives resolution changes, so it reads the current one here
+  const resolutionRef = useRef(resolution);
 
   const haptic = useHaptic();
   const isUnreachable = useApiHealthStore(selectIsUnreachable);
@@ -154,6 +156,7 @@ export function PriceSentimentChart({
     if (typeof window !== 'undefined') {
       sessionStorage.setItem('ohlc_preferred_resolution', resolution);
     }
+    resolutionRef.current = resolution;
   }, [resolution]);
 
   // T026: Persist timeRange to sessionStorage when it changes
@@ -310,7 +313,7 @@ export function PriceSentimentChart({
           : param.time;
 
         const tooltipData: TooltipData = {
-          date: formatChartDate(timeValue, resolution),
+          date: formatChartDate(timeValue, resolutionRef.current),
         };
 
         // Check if this is a gap marker

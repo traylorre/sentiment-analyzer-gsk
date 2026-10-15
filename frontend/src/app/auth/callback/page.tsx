@@ -18,7 +18,8 @@
  * 6. On error, displays message with retry option
  */
 
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useRef, useState, Suspense } from 'react';
+import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Check, X, Loader2 } from 'lucide-react';
@@ -34,7 +35,7 @@ function CallbackContent() {
 
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [hasProcessed, setHasProcessed] = useState(false);
+  const hasProcessedRef = useRef(false);
 
   const code = searchParams.get('code');
   const stateFromUrl = searchParams.get('state');
@@ -42,9 +43,10 @@ function CallbackContent() {
   const errorDescription = searchParams.get('error_description');
 
   useEffect(() => {
-    // Prevent double-processing (React StrictMode or re-renders)
-    if (hasProcessed) return;
-    setHasProcessed(true);
+    // Prevent double-processing. A ref, not state: StrictMode re-runs this
+    // effect with the same closure, where a state flag would still read false.
+    if (hasProcessedRef.current) return;
+    hasProcessedRef.current = true;
 
     // Feature 1245: Handle OAuth provider errors with user-friendly messages (FR-010)
     if (errorParam) {
@@ -52,6 +54,9 @@ function CallbackContent() {
       sessionStorage.removeItem('oauth_provider');
       sessionStorage.removeItem('oauth_state');
 
+      // This effect consumes and clears the one-shot OAuth state in
+      // sessionStorage, which cannot happen during render; its outcome is state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStatus('error');
       const errorMessages: Record<string, string> = {
         access_denied: 'Sign-in was cancelled. You can try again or continue as guest.',
@@ -237,12 +242,12 @@ function CallbackContent() {
           Try again
         </Button>
         {/* Feature 1245: Continue as guest option on all error states */}
-        <a
+        <Link
           href="/"
           className="text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           Continue as guest
-        </a>
+        </Link>
       </div>
     </motion.div>
   );

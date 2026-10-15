@@ -8,6 +8,9 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./tests/setup.ts'],
     globals: true,
+    // jsdom role queries and user-event clicks cost seconds per test when every
+    // worker is busy; the slowest test has measured above 7 s under a full run.
+    testTimeout: 20000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html'],
