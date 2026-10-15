@@ -121,11 +121,6 @@ export const ConfigCard = memo(function ConfigCard({
             )}
           </div>
 
-          {/* Sparkline placeholder */}
-          <div className="h-8 bg-muted/30 rounded flex items-center justify-center">
-            <Sparkline />
-          </div>
-
           {/* Footer */}
           <div className="flex items-center justify-between mt-3 text-xs text-muted-foreground">
             <div className="flex items-center gap-1">
@@ -141,35 +136,6 @@ export const ConfigCard = memo(function ConfigCard({
     </motion.div>
   );
 });
-
-// Simple sparkline placeholder
-function Sparkline() {
-  // Generate random sparkline points
-  const points = Array.from({ length: 12 }, () => Math.random() * 100);
-  const max = Math.max(...points);
-  const min = Math.min(...points);
-  const range = max - min || 1;
-
-  const pathD = points
-    .map((p, i) => {
-      const x = (i / (points.length - 1)) * 100;
-      const y = 100 - ((p - min) / range) * 100;
-      return `${i === 0 ? 'M' : 'L'} ${x} ${y}`;
-    })
-    .join(' ');
-
-  return (
-    <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-      <path
-        d={pathD}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        className="text-accent/50"
-      />
-    </svg>
-  );
-}
 
 function formatRelativeTime(dateStr: string): string {
   const date = new Date(dateStr);

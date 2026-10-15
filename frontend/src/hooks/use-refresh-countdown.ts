@@ -33,7 +33,8 @@ export function useRefreshCountdown(options: UseRefreshCountdownOptions = {}) {
   });
 
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const lastTickRef = useRef<number>(Date.now());
+  // Set by every path that starts the interval, before the first tick reads it
+  const lastTickRef = useRef(0);
   const remainingRef = useRef(intervalMs);
 
   // Clean up on unmount
@@ -85,7 +86,7 @@ export function useRefreshCountdown(options: UseRefreshCountdownOptions = {}) {
     }
   }, [intervalMs, triggerRefresh]);
 
-  const start = useCallback(() => {
+  const startTimer = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
     }
@@ -93,9 +94,12 @@ export function useRefreshCountdown(options: UseRefreshCountdownOptions = {}) {
     lastTickRef.current = Date.now();
 
     intervalRef.current = setInterval(updateCountdown, 1000);
-
-    setState((prev) => ({ ...prev, isPaused: false }));
   }, [updateCountdown]);
+
+  const start = useCallback(() => {
+    startTimer();
+    setState((prev) => ({ ...prev, isPaused: false }));
+  }, [startTimer]);
 
   const pause = useCallback(() => {
     if (intervalRef.current) {
@@ -126,10 +130,10 @@ export function useRefreshCountdown(options: UseRefreshCountdownOptions = {}) {
     });
   }, [pause, triggerRefresh, start, state.isPaused]);
 
-  // Auto-start on mount
+  // Auto-start on mount; isPaused already starts false when autoStart is set
   useEffect(() => {
     if (autoStart) {
-      start();
+      startTimer();
     }
 
     return () => {
@@ -137,7 +141,7 @@ export function useRefreshCountdown(options: UseRefreshCountdownOptions = {}) {
         clearInterval(intervalRef.current);
       }
     };
-  }, [autoStart, start]);
+  }, [autoStart, startTimer]);
 
   // Format helpers
   const formatTime = useCallback((ms: number) => {

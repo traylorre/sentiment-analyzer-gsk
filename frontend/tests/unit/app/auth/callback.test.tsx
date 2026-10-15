@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -67,6 +68,27 @@ describe('OAuth Callback Page', () => {
       await waitFor(() => {
         expect(screen.getByText(/completing sign in/i)).toBeInTheDocument();
       });
+    });
+  });
+
+  describe('StrictMode', () => {
+    it('should process the callback once when effects run twice', async () => {
+      setSearchParams({ code: 'auth_code_123', state: 'valid_state' });
+      sessionStorage.setItem('oauth_provider', 'google');
+      sessionStorage.setItem('oauth_state', 'valid_state');
+      mockHandleCallback.mockImplementation(() => new Promise(() => {})); // Never resolves
+
+      await act(async () => {
+        render(
+          <StrictMode>
+            <CallbackPage />
+          </StrictMode>
+        );
+      });
+
+      expect(mockHandleCallback).toHaveBeenCalledTimes(1);
+      expect(screen.getByText(/completing sign in/i)).toBeInTheDocument();
+      expect(screen.queryByText(/session expired/i)).not.toBeInTheDocument();
     });
   });
 
@@ -262,11 +284,11 @@ describe('OAuth Callback Page', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText(/authentication was cancelled/i)).toBeInTheDocument();
+        expect(screen.getByText(/sign-in was cancelled/i)).toBeInTheDocument();
       });
     });
 
-    it('should show error description when provided', async () => {
+    it('should not render the provider-supplied error_description', async () => {
       setSearchParams({
         error: 'access_denied',
         error_description: 'User declined authorization',
@@ -277,7 +299,22 @@ describe('OAuth Callback Page', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText(/user declined authorization/i)).toBeInTheDocument();
+        expect(screen.getByText(/sign-in was cancelled/i)).toBeInTheDocument();
+      });
+      expect(screen.queryByText(/user declined authorization/i)).not.toBeInTheDocument();
+    });
+
+    it('should show a generic message for an unrecognised error code', async () => {
+      setSearchParams({ error: 'temporarily_unavailable' });
+
+      await act(async () => {
+        render(<CallbackPage />);
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/sign-in failed\. please try again or use email sign-in/i)
+        ).toBeInTheDocument();
       });
     });
 

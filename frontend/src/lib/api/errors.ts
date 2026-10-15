@@ -6,6 +6,7 @@
  */
 
 import { useAuthStore } from '@/stores/auth-store';
+import { hardNavigate } from '@/lib/utils/url';
 
 /**
  * Auth error code types from backend (spec-v2.md A23).
@@ -42,7 +43,7 @@ function clearTokensAndRedirect(message?: string): void {
   }
   // Redirect to home/login page
   if (typeof window !== 'undefined') {
-    window.location.href = '/';
+    hardNavigate('/');
   }
 }
 

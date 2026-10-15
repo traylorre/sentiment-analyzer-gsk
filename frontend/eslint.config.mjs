@@ -8,4 +8,10 @@ export default defineConfig([
   {
     extends: [...nextCoreWebVitals],
   },
+  {
+    // Playwright passes each fixture a callback named `use`, which this rule
+    // mistakes for React's use() hook.
+    files: ['tests/e2e/**'],
+    rules: { 'react-hooks/rules-of-hooks': 'off' },
+  },
 ]);

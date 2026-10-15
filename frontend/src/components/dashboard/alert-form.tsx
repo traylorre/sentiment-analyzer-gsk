@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, TrendingUp, TrendingDown, Activity, AlertCircle, Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,25 @@ interface AlertFormProps {
   isLoading?: boolean;
 }
 
+function initialFields(editingAlert: AlertRule | null | undefined, configurations: Configuration[]) {
+  if (editingAlert) {
+    return {
+      configId: editingAlert.configId,
+      ticker: editingAlert.ticker,
+      alertType: editingAlert.alertType,
+      thresholdValue: editingAlert.thresholdValue,
+      thresholdDirection: editingAlert.thresholdDirection,
+    };
+  }
+  return {
+    configId: configurations[0]?.configId ?? '',
+    ticker: '',
+    alertType: 'sentiment_threshold' as AlertType,
+    thresholdValue: 0.5,
+    thresholdDirection: 'above' as ThresholdDirection,
+  };
+}
+
 export function AlertForm({
   isOpen,
   editingAlert,
@@ -29,11 +48,12 @@ export function AlertForm({
   const isEditing = !!editingAlert;
 
   // Form state
-  const [configId, setConfigId] = useState<string>('');
-  const [ticker, setTicker] = useState<string>('');
-  const [alertType, setAlertType] = useState<AlertType>('sentiment_threshold');
-  const [thresholdValue, setThresholdValue] = useState<number>(0.5);
-  const [thresholdDirection, setThresholdDirection] = useState<ThresholdDirection>('above');
+  const [initial] = useState(() => initialFields(editingAlert, configurations));
+  const [configId, setConfigId] = useState(initial.configId);
+  const [ticker, setTicker] = useState(initial.ticker);
+  const [alertType, setAlertType] = useState(initial.alertType);
+  const [thresholdValue, setThresholdValue] = useState(initial.thresholdValue);
+  const [thresholdDirection, setThresholdDirection] = useState(initial.thresholdDirection);
   const [error, setError] = useState<string | null>(null);
 
   // Get available tickers from selected config
@@ -42,31 +62,29 @@ export function AlertForm({
     return config?.tickers ?? [];
   }, [configurations, configId]);
 
-  // Initialize form when editing
-  useEffect(() => {
-    if (editingAlert) {
-      setConfigId(editingAlert.configId);
-      setTicker(editingAlert.ticker);
-      setAlertType(editingAlert.alertType);
-      setThresholdValue(editingAlert.thresholdValue);
-      setThresholdDirection(editingAlert.thresholdDirection);
-    } else {
-      // Reset for create mode
-      setConfigId(configurations[0]?.configId ?? '');
-      setTicker('');
-      setAlertType('sentiment_threshold');
-      setThresholdValue(0.5);
-      setThresholdDirection('above');
-    }
+  // Re-initialize the form when it opens, its target changes or the configurations reload
+  const [formInputs, setFormInputs] = useState({ editingAlert, isOpen, configurations });
+  if (
+    formInputs.editingAlert !== editingAlert ||
+    formInputs.isOpen !== isOpen ||
+    formInputs.configurations !== configurations
+  ) {
+    setFormInputs({ editingAlert, isOpen, configurations });
+    const next = initialFields(editingAlert, configurations);
+    setConfigId(next.configId);
+    setTicker(next.ticker);
+    setAlertType(next.alertType);
+    setThresholdValue(next.thresholdValue);
+    setThresholdDirection(next.thresholdDirection);
     setError(null);
-  }, [editingAlert, isOpen, configurations]);
-
-  // Update ticker when config changes
-  useEffect(() => {
-    if (!isEditing && availableTickers.length > 0 && !availableTickers.some(t => t.symbol === ticker)) {
-      setTicker(availableTickers[0].symbol);
-    }
-  }, [availableTickers, ticker, isEditing]);
+  } else if (
+    !isEditing &&
+    availableTickers.length > 0 &&
+    !availableTickers.some((t) => t.symbol === ticker)
+  ) {
+    // Select the first ticker when the chosen config does not offer the current one
+    setTicker(availableTickers[0].symbol);
+  }
 
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {

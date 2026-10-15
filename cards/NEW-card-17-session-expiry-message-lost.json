@@ -1,0 +1,26 @@
+{
+  "id": "NEW",
+  "subject": "Session-expiry messages are never shown: clearTokensAndRedirect writes them to the memory-only auth store and then reloads the page",
+  "activeForm": "Making session-expiry messages survive the redirect",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": [],
+  "origin": {
+    "introduced_by": "pre-existing",
+    "evidence": "sed -n '/function clearTokensAndRedirect/,/^}/p' frontend/src/lib/api/errors.ts; grep -n 'Memory-only store' frontend/src/stores/auth-store.ts"
+  },
+  "runConfiguration": {
+    "work_items": [
+      "Show the AUTH_013/014/018 message after the forced redirect"
+    ],
+    "backwards_compatibility": null,
+    "security_tier": null,
+    "operational_rigour": null,
+    "audience": [
+      "maintainer"
+    ],
+    "allow_git_log": false,
+    "md_is_canonical": true
+  },
+  "description": "Found by card #17 on 2026-10-14 while routing hard navigations through hardNavigate(). clearTokensAndRedirect in frontend/src/lib/api/errors.ts resets the auth store, calls setError(message), then navigates with a full page load. The auth store is memory-only by design since feature 1165 (frontend/src/stores/auth-store.ts:101), so the reload discards the error before anything renders it. The three handlers that use it (AUTH_013, AUTH_014, AUTH_018 in AUTH_ERROR_HANDLERS) therefore drop the user on / with no explanation; AUTH_018 is 'Session expired. Please sign in again.' Read from the code, not reproduced in a browser. Likely fix: carry the message across the reload in sessionStorage (or a query parameter) and show it once on load, keeping tokens out of storage."
+}

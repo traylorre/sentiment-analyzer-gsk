@@ -13,9 +13,9 @@
     "work_items": [
       "Card #17: diagnose and fix the 22 failing frontend unit tests and 29 lint errors, then add a CI job running frontend vitest, eslint and build"
     ],
-    "backwards_compatibility": null,
-    "security_tier": null,
-    "operational_rigour": null,
+    "backwards_compatibility": "none. Lint fixes refactor React components and hooks without changing user-visible behaviour or any API contract.",
+    "security_tier": "S1. Auth components (oauth-buttons, callback, user-menu) are touched for test and lint fixes only; no auth behaviour changes.",
+    "operational_rigour": "standard. Every fixed test failure carries a named cause; the new CI job is proven to go red on a deliberate break before it counts. Preprod verification only if the oauth-buttons cause is shown to be the preprod auth.spec.ts:24 failure. Operator approved making the frontend job a required status check on main once it runs green on this card's PR.",
     "audience": [
       "maintainer"
     ],

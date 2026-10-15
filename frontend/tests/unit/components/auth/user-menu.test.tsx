@@ -201,7 +201,7 @@ describe('UserMenu', () => {
       expect(mockSignOut).toHaveBeenCalled();
     });
 
-    it('should route to settings via router (no hard-nav) when settings clicked', async () => {
+    it('should render settings as a client-side link to /settings', async () => {
       const user = userEvent.setup();
       mockUseAuth.mockReturnValue({
         isInitialized: true, // Feature 1165: Use isInitialized instead of hasHydrated
@@ -221,11 +221,12 @@ describe('UserMenu', () => {
       const menuButton = screen.getByRole('button');
       await user.click(menuButton);
 
-      const settingsButton = screen.getByText(/settings/i);
-      await user.click(settingsButton);
-
-      // Feature 1394: client-side routing preserves the memory-only auth store.
-      expect(mockPush).toHaveBeenCalledWith('/settings');
+      // Feature 1394: next/link owns client-side navigation, which preserves
+      // the memory-only auth store that a full reload would wipe.
+      expect(screen.getByRole('menuitem', { name: /settings/i })).toHaveAttribute(
+        'href',
+        '/settings'
+      );
     });
   });
 });
