@@ -13,9 +13,9 @@
     "work_items": [
       "Card #21: stop unit tests inheriting GIT_* from the hook environment"
     ],
-    "backwards_compatibility": null,
-    "security_tier": null,
-    "operational_rigour": null,
+    "backwards_compatibility": "none. The change touches only the unit-test harness; nothing that ships changes.",
+    "security_tier": "S1. The fix makes the pre-push security test hermetic; no security code changes.",
+    "operational_rigour": "standard. The regression test is shown red with the fixture disabled; a real pre-push is exercised from a scratch linked worktree, never from this repo's worktree. No preprod verification: nothing changed is observable there.",
     "audience": [
       "maintainer"
     ],

@@ -13,6 +13,18 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def isolate_from_git_hook_environment(monkeypatch):
+    """The pre-push hook runs this suite, and git exports GIT_DIR to it. From a linked
+    worktree that GIT_DIR is ``<repo>/.git/worktrees/<name>``, and a test's ``git init``
+    under it re-initialises the shared repository with ``core.bare = true``, breaking git
+    in every checkout. Every git child of a unit test must act only on the repository its
+    own arguments name.
+    """
+    for name in [name for name in os.environ if name.startswith("GIT_")]:
+        monkeypatch.delenv(name)
+
+
+@pytest.fixture(autouse=True)
 def default_app_jwt_secret(monkeypatch):
     """Feature 1396: the OAuth callback and refresh now mint a first-party app JWT and
     fail closed when JWT_SECRET is unset (production always sets it). Multiple unit-test
