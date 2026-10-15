@@ -145,11 +145,15 @@ export function UndoToast({
 }: UndoToastProps) {
   const [progress, setProgress] = useState(100);
 
+  // Refill the progress bar whenever the toast is hidden
+  const [wasVisible, setWasVisible] = useState(isVisible);
+  if (wasVisible !== isVisible) {
+    setWasVisible(isVisible);
+    if (!isVisible) setProgress(100);
+  }
+
   useEffect(() => {
-    if (!isVisible) {
-      setProgress(100);
-      return;
-    }
+    if (!isVisible) return;
 
     const startTime = Date.now();
     const endTime = startTime + duration;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { REFRESH_INTERVAL_SECONDS } from '@/lib/constants';
 
 /**
@@ -65,9 +65,8 @@ function formatCompact(ageMs: number): string {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-function calculateAge(serverTimestamp: string, clientFetchTime: number): number {
+function calculateAge(serverTimestamp: string, clientFetchTime: number, now: number): number {
   const serverTime = new Date(serverTimestamp).getTime();
-  const now = Date.now();
   const age = now - serverTime;
 
   if (age < 0) {
@@ -83,54 +82,53 @@ function calculateAge(serverTimestamp: string, clientFetchTime: number): number 
 }
 
 export function useDataFreshness(lastUpdated: string | null): DataFreshnessResult {
-  // Capture client time when lastUpdated changes (for clock skew fallback)
-  const clientFetchTimeRef = useRef<number>(Date.now());
+  // fetchedAt: client time when lastUpdated last changed (the clock skew fallback).
+  // now: the latest clock reading the age is measured against.
+  const [clock, setClock] = useState(() => {
+    const t = Date.now();
+    return { fetchedAt: t, now: t };
+  });
 
-  const compute = useCallback((): DataFreshnessResult => {
-    if (!lastUpdated) {
-      return { ageMs: 0, state: 'loading', formattedAge: '' };
-    }
-    const ageMs = calculateAge(lastUpdated, clientFetchTimeRef.current);
-    return {
-      ageMs,
-      state: getFreshnessState(ageMs),
-      formattedAge: formatRelativeTime(ageMs),
-    };
-  }, [lastUpdated]);
-
-  const [result, setResult] = useState<DataFreshnessResult>(compute);
-
-  // Update client fetch time when lastUpdated changes
   useEffect(() => {
-    if (lastUpdated) {
-      clientFetchTimeRef.current = Date.now();
-    }
-    setResult(compute());
-  }, [lastUpdated, compute]);
+    const t = Date.now();
+    // The arrival time of new data is a clock read, which cannot happen during render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setClock({ fetchedAt: t, now: t });
+  }, [lastUpdated]);
 
   // Update once per minute
   useEffect(() => {
     if (!lastUpdated) return;
 
     const interval = setInterval(() => {
-      setResult(compute());
+      setClock((c) => ({ ...c, now: Date.now() }));
     }, 60_000);
 
     return () => clearInterval(interval);
-  }, [lastUpdated, compute]);
+  }, [lastUpdated]);
 
   // Recalculate immediately on tab visibility change
   useEffect(() => {
     const handler = () => {
       if (document.visibilityState === 'visible') {
-        setResult(compute());
+        setClock((c) => ({ ...c, now: Date.now() }));
       }
     };
     document.addEventListener('visibilitychange', handler);
     return () => document.removeEventListener('visibilitychange', handler);
-  }, [compute]);
+  }, []);
 
-  return result;
+  return useMemo(() => {
+    if (!lastUpdated) {
+      return { ageMs: 0, state: 'loading', formattedAge: '' };
+    }
+    const ageMs = calculateAge(lastUpdated, clock.fetchedAt, clock.now);
+    return {
+      ageMs,
+      state: getFreshnessState(ageMs),
+      formattedAge: formatRelativeTime(ageMs),
+    };
+  }, [lastUpdated, clock]);
 }
 
 // Export compact formatter for mobile use

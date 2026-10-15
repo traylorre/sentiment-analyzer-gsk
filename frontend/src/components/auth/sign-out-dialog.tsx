@@ -6,6 +6,7 @@ import { LogOut, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/use-auth';
 import { cn } from '@/lib/utils';
+import { hardNavigate } from '@/lib/utils/url';
 
 interface SignOutDialogProps {
   open: boolean;
@@ -32,7 +33,7 @@ export function SignOutDialog({ open, onOpenChange }: SignOutDialogProps) {
     try {
       setIsSigningOut(true);
       await signOut();
-      window.location.href = '/';
+      hardNavigate('/');
     } catch {
       // Error handled by auth store
       setIsSigningOut(false);
