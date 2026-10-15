@@ -9,14 +9,18 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 import { useTierUpgrade } from '@/hooks/use-tier-upgrade';
 
 // Mock dependencies
+const mockStore = vi.hoisted(() => ({
+  state: {
+    user: { userId: 'user_123', role: 'free' },
+    setUser: vi.fn(),
+  },
+}));
+
 vi.mock('@/stores/auth-store', () => ({
-  useAuthStore: vi.fn((selector) => {
-    const state = {
-      user: { userId: 'user_123', role: 'free' },
-      setUser: vi.fn(),
-    };
-    return selector(state);
-  }),
+  useAuthStore: Object.assign(
+    vi.fn((selector) => selector(mockStore.state)),
+    { getState: () => mockStore.state }
+  ),
 }));
 
 vi.mock('@/lib/api', () => ({
@@ -135,6 +139,9 @@ describe('useTierUpgrade', () => {
     expect(result.current.state.success).toBe(true);
     expect(result.current.state.isPolling).toBe(false);
     expect(toast.success).toHaveBeenCalled();
+    expect(mockStore.state.setUser).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'user_123', role: 'paid', subscriptionActive: true })
+    );
   });
 
   it('should timeout after all intervals exhausted', async () => {

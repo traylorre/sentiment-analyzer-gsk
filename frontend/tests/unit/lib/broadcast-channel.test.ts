@@ -5,6 +5,15 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// The module reads crypto.randomUUID() once at load to fix its TAB_ID, so the
+// stub has to be in place before the import below is evaluated.
+vi.hoisted(() => {
+  vi.stubGlobal('crypto', {
+    randomUUID: () => 'test-tab-id',
+  });
+});
+
 import { AuthBroadcastSync, getAuthBroadcastSync } from '@/lib/sync/broadcast-channel';
 
 describe('AuthBroadcastSync', () => {
@@ -24,13 +33,11 @@ describe('AuthBroadcastSync', () => {
 
     vi.stubGlobal(
       'BroadcastChannel',
-      vi.fn(() => mockBroadcastChannel)
+      vi.fn(function () {
+        return mockBroadcastChannel;
+      })
     );
 
-    // Mock crypto.randomUUID
-    vi.stubGlobal('crypto', {
-      randomUUID: () => 'test-tab-id',
-    });
   });
 
   afterEach(() => {
@@ -234,11 +241,13 @@ describe('getAuthBroadcastSync', () => {
   beforeEach(() => {
     vi.stubGlobal(
       'BroadcastChannel',
-      vi.fn(() => ({
-        postMessage: vi.fn(),
-        close: vi.fn(),
-        onmessage: null,
-      }))
+      vi.fn(function () {
+        return {
+          postMessage: vi.fn(),
+          close: vi.fn(),
+          onmessage: null,
+        };
+      })
     );
   });
 

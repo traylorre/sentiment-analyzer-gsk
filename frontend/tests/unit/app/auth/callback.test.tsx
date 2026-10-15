@@ -262,11 +262,11 @@ describe('OAuth Callback Page', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText(/authentication was cancelled/i)).toBeInTheDocument();
+        expect(screen.getByText(/sign-in was cancelled/i)).toBeInTheDocument();
       });
     });
 
-    it('should show error description when provided', async () => {
+    it('should not render the provider-supplied error_description', async () => {
       setSearchParams({
         error: 'access_denied',
         error_description: 'User declined authorization',
@@ -277,7 +277,22 @@ describe('OAuth Callback Page', () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText(/user declined authorization/i)).toBeInTheDocument();
+        expect(screen.getByText(/sign-in was cancelled/i)).toBeInTheDocument();
+      });
+      expect(screen.queryByText(/user declined authorization/i)).not.toBeInTheDocument();
+    });
+
+    it('should show a generic message for an unrecognised error code', async () => {
+      setSearchParams({ error: 'temporarily_unavailable' });
+
+      await act(async () => {
+        render(<CallbackPage />);
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByText(/sign-in failed\. please try again or use email sign-in/i)
+        ).toBeInTheDocument();
       });
     });
 
