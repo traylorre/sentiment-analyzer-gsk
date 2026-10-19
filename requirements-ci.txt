@@ -54,7 +54,7 @@ responses==0.26.3
 
 # Code Quality
 ruff==0.15.14
-pre-commit==4.6.2
+pre-commit==4.7.0
 
 # Type Checking
 mypy==1.19.1
