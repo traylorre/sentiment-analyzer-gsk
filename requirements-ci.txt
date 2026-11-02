@@ -42,9 +42,9 @@ aws-lambda-powertools==3.37.0
 # =============================================================================
 
 # Testing Framework
-pytest==9.1.1
+pytest==9.2.0
 pytest-cov==7.1.0
-pytest-asyncio==1.4.0
+pytest-asyncio==1.4.1
 
 # AWS Mocking - Critical for unit tests
 moto[all]==5.2.5
