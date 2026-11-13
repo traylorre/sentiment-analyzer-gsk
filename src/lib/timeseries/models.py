@@ -67,18 +67,24 @@ class Resolution(str, Enum):  # noqa: UP042 - StrEnum changes str() of serialize
 
 class SentimentScore(BaseModel):
     """
-    A single sentiment score from an analyzed article.
+    A single signed sentiment contribution from an analyzed article.
 
-    Used as input to aggregation functions.
+    Used as input to aggregation functions. `value` is the signed contribution
+    (positive label -> +confidence, negative -> -confidence, neutral -> 0.0),
+    not the raw model confidence.
     """
 
-    value: float = Field(ge=-1.0, le=1.0, description="Sentiment score [-1, 1]")
+    value: float = Field(
+        ge=-1.0, le=1.0, description="Signed sentiment contribution [-1, 1]"
+    )
     timestamp: datetime = Field(description="When the article was analyzed")
     label: str | None = Field(
         default=None, description="Sentiment label (positive/neutral/negative)"
     )
     ticker: str | None = Field(default=None, description="Stock ticker symbol")
-    source: str | None = Field(default=None, description="Data source (tiingo/finnhub)")
+    source: str | None = Field(
+        default=None, description="Provider name (tiingo/finnhub)"
+    )
 
 
 class OHLCBucket(BaseModel):
@@ -111,18 +117,39 @@ class SentimentBucket(BaseModel):
     ticker: str
     resolution: Resolution
     timestamp: datetime = Field(description="Bucket start time (aligned to resolution)")
-    open: float = Field(description="First sentiment score in bucket")
-    high: float = Field(description="Maximum sentiment score in bucket")
-    low: float = Field(description="Minimum sentiment score in bucket")
-    close: float = Field(description="Last sentiment score in bucket")
-    count: int = Field(description="Number of articles in bucket")
-    sum: float = Field(description="Sum of scores")
-    avg: float = Field(description="Average sentiment score")
-    label_counts: dict[str, int] = Field(
-        default_factory=dict, description="Distribution by label"
+    open: float = Field(
+        description="Signed value of the earliest-timestamped article in bucket"
     )
-    sources: list[str] = Field(default_factory=list, description="Unique data sources")
-    is_partial: bool = Field(default=False, description="True for incomplete bucket")
+    high: float = Field(description="Maximum signed contribution in bucket")
+    low: float = Field(description="Minimum signed contribution in bucket")
+    close: float = Field(
+        description="Signed value of the latest-timestamped article in bucket"
+    )
+    count: int = Field(description="Number of contributing articles")
+    sum: float = Field(description="Sum of signed contributions")
+    avg: float = Field(description="sum/count, recomputed on every write")
+    label_counts: dict[str, int] = Field(
+        default_factory=dict, description="Merged distribution by label"
+    )
+    sources: list[str] = Field(
+        default_factory=list,
+        description="Bounded set of provider names (tiingo/finnhub)",
+    )
+    is_partial: bool = Field(
+        default=False,
+        description="Always True on write; readers compute completeness at query time",
+    )
+    version: int | None = Field(
+        default=None,
+        description="Monotonically increasing optimistic-concurrency guard; "
+        "absent on legacy pre-cutover buckets",
+    )
+    open_ts: datetime | None = Field(
+        default=None, description="Article timestamp backing the open value"
+    )
+    close_ts: datetime | None = Field(
+        default=None, description="Article timestamp backing the close value"
+    )
 
 
 class PartialBucket(SentimentBucket):

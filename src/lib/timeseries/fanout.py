@@ -1,451 +1,243 @@
 """
-Time-series write fanout for multi-resolution sentiment data.
+Accumulating time-series write fanout for multi-resolution sentiment data.
 
-Canonical References:
-- [CS-001] AWS DynamoDB Best Practices: "Pre-aggregate at write time for known query patterns"
-- [CS-003] Rick Houlihan re:Invent 2018: "Write amplification acceptable when reads >> writes"
-- [CS-013] AWS DynamoDB TTL: "Use TTL to automatically expire items"
-- [CS-014] AWS Architecture Blog: "Resolution-dependent retention policies"
+One signed sentiment contribution fans out into 6 resolution buckets
+(1m/5m/15m/30m/1h/24h). Each bucket write is optimistic concurrency: read the
+bucket, compute the complete next state locally, write it with a single
+conditional PutItem guarded on a `version` attribute (research D1). Every
+observable bucket is therefore a complete, internally consistent state at a
+single version.
 
-This module fans out a single sentiment score into 6 resolution buckets (1m/5m/15m/30m/1h/24h)
-using BatchWriteItem for efficiency.
+Import constraint: the SSE image copies src/lib/timeseries as a whole
+directory but top-level src/lib files individually, so this module must not
+import any top-level src/lib module other than metrics.py.
 """
 
 import logging
+import random
+import time
 from datetime import datetime
 from typing import Any
 
-from aws_lambda_powertools import Tracer
 from botocore.exceptions import ClientError
 
-from src.lib.metrics import emit_metric
 from src.lib.timeseries.bucket import floor_to_bucket
 from src.lib.timeseries.models import Resolution, SentimentScore
 
 logger = logging.getLogger(__name__)
-tracer = Tracer()
+
+MAX_RETRIES = 5
+BASE_BACKOFF_SECONDS = 0.05
 
 
-def generate_fanout_items(score: SentimentScore) -> list[dict[str, Any]]:
+class FanoutWriteError(Exception):
+    """A bucket write failed after bounded retries.
+
+    Carries the repair coordinates: run the backfill for this ticker/window
+    (quickstart.md runbook).
     """
-    Generate DynamoDB items for all 6 resolutions from a single sentiment score.
 
-    Canonical: [CS-001] "Pre-aggregate at write time for known query patterns"
+    def __init__(
+        self, ticker: str, resolution: str, window: str, error_class: str
+    ) -> None:
+        self.ticker = ticker
+        self.resolution = resolution
+        self.window = window
+        self.error_class = error_class
+        super().__init__(
+            f"fanout write failed for {ticker}#{resolution} window {window}: "
+            f"{error_class}"
+        )
 
-    Args:
-        score: The sentiment score to fan out
 
-    Returns:
-        List of 6 DynamoDB items (one per resolution)
+def _parse_number(item: dict[str, Any], field: str) -> float:
+    return float(item[field]["N"])
 
-    Raises:
-        ValueError: If score.ticker is None or empty
+
+def _parse_label_counts(item: dict[str, Any]) -> dict[str, int]:
+    raw = item.get("label_counts", {}).get("M", {})
+    return {label: int(value["N"]) for label, value in raw.items()}
+
+
+def _parse_sources(item: dict[str, Any]) -> set[str]:
+    # Only the string-set shape survives; legacy list-of-dedup-ids sources are
+    # dropped on adoption (research D8).
+    if "sources" in item and "SS" in item["sources"]:
+        return set(item["sources"]["SS"])
+    return set()
+
+
+def _next_state(
+    current: dict[str, Any] | None,
+    score: SentimentScore,
+    bucket_timestamp: datetime,
+    resolution: Resolution,
+) -> tuple[dict[str, Any], int | None]:
+    """Compute the complete next bucket state.
+
+    Returns (item, expected_version); expected_version is None when the read
+    found no version attribute (absent bucket or legacy pre-cutover bucket).
     """
-    if not score.ticker:
-        raise ValueError("Sentiment score must have a ticker for fanout")
-
-    items = []
-
-    for resolution in Resolution:
-        # Calculate aligned bucket timestamp
-        bucket_timestamp = floor_to_bucket(score.timestamp, resolution)
-
-        # Calculate TTL based on resolution
-        ttl = int(bucket_timestamp.timestamp()) + resolution.ttl_seconds
-
-        # Build DynamoDB item
-        item: dict[str, Any] = {
-            "PK": {"S": f"{score.ticker}#{resolution.value}"},
-            "SK": {"S": bucket_timestamp.isoformat()},
-            # OHLC values - for a single score, all are the same
-            "open": {"N": str(score.value)},
-            "high": {"N": str(score.value)},
-            "low": {"N": str(score.value)},
-            "close": {"N": str(score.value)},
-            # Aggregation metadata
-            "count": {"N": "1"},
-            "sum": {"N": str(score.value)},
-            "avg": {"N": str(score.value)},
-            # TTL for automatic expiration
-            "ttl": {"N": str(ttl)},
-            # Partial bucket indicator (always true for initial write)
-            "is_partial": {"BOOL": True},
-            # Source tracking
-            "sources": {"L": [{"S": score.source}] if score.source else []},
-            # Label counts
-            "label_counts": {"M": {score.label: {"N": "1"}} if score.label else {}},
-            # Original timestamp for ordering within bucket
-            "original_timestamp": {"S": score.timestamp.isoformat()},
-        }
-
-        items.append(item)
-
-    return items
-
-
-def _build_update_expression(
-    score: SentimentScore, bucket_timestamp: datetime, resolution: Resolution
-) -> tuple[str, dict[str, Any], dict[str, str]]:
-    """
-    Build UpdateItem expression for upserting into existing bucket.
-
-    Returns:
-        Tuple of (update_expression, expression_attribute_values, expression_attribute_names)
-    """
+    article_ts = score.timestamp.isoformat()
     ttl = int(bucket_timestamp.timestamp()) + resolution.ttl_seconds
 
-    update_expr = (
-        "SET #open = if_not_exists(#open, :value), "
-        "#close = :value, "
-        "#high = if_not_exists(#high, :value), "
-        "#low = if_not_exists(#low, :value), "
-        "is_partial = :is_partial, "
-        "original_timestamp = :orig_ts, "
-        "#ttl = :ttl "
-        "ADD #count :one, #sum :value"
-    )
-
-    # Conditional update for high/low
-    # This requires separate updates or more complex logic
-    # For now, we use a simpler approach with UpdateItem
-
-    expr_values: dict[str, Any] = {
-        ":value": {"N": str(score.value)},
-        ":one": {"N": "1"},
-        ":is_partial": {"BOOL": True},
-        ":orig_ts": {"S": score.timestamp.isoformat()},
-        ":ttl": {"N": str(ttl)},
-    }
-
-    expr_names = {
-        "#open": "open",
-        "#close": "close",
-        "#high": "high",
-        "#low": "low",
-        "#count": "count",
-        "#sum": "sum",
-        "#ttl": "ttl",
-    }
-
-    return update_expr, expr_values, expr_names
-
-
-def write_fanout(
-    dynamodb: Any,
-    table_name: str,
-    score: SentimentScore,
-) -> None:
-    """
-    Write a sentiment score to all 6 resolution buckets.
-
-    Uses BatchWriteItem for efficiency when creating new items,
-    falls back to UpdateItem for upserting existing buckets.
-
-    Canonical: [CS-003] "Write amplification acceptable when reads >> writes"
-
-    Args:
-        dynamodb: boto3 DynamoDB client
-        table_name: Target table name
-        score: Sentiment score to write
-
-    Raises:
-        ClientError: On DynamoDB errors
-    """
-    items = generate_fanout_items(score)
-
-    # Use BatchWriteItem for initial writes
-    # For updates, we'd need UpdateItem with conditional expressions
-    request_items = {table_name: [{"PutRequest": {"Item": item}} for item in items]}
-
-    try:
-        response = dynamodb.batch_write_item(RequestItems=request_items)
-
-        # Handle unprocessed items (retry logic)
-        unprocessed = response.get("UnprocessedItems", {})
-        retry_count = 0
-        max_retries = 3
-
-        while unprocessed and retry_count < max_retries:
-            logger.warning(
-                "Retrying unprocessed items",
-                extra={
-                    "unprocessed_count": len(unprocessed.get(table_name, [])),
-                    "retry": retry_count + 1,
-                },
-            )
-            response = dynamodb.batch_write_item(RequestItems=unprocessed)
-            unprocessed = response.get("UnprocessedItems", {})
-            retry_count += 1
-
-        if unprocessed:
-            logger.error(
-                "Failed to write all items after retries",
-                extra={
-                    "unprocessed_count": len(unprocessed.get(table_name, [])),
-                    "ticker": score.ticker,
-                },
-            )
-
-    except ClientError as e:
-        logger.error(
-            "BatchWriteItem failed",
-            extra={
-                "error_code": e.response.get("Error", {}).get("Code"),
-                "error_message": e.response.get("Error", {}).get("Message"),
-                "table_name": table_name,
-                "ticker": score.ticker,
-            },
+    if current is None:
+        expected_version = None
+        count = 1
+        total = score.value
+        open_value, close_value = score.value, score.value
+        open_ts, close_ts = article_ts, article_ts
+        high, low = score.value, score.value
+        label_counts: dict[str, int] = {score.label: 1} if score.label else {}
+        sources: set[str] = {score.source} if score.source else set()
+        version = 1
+    else:
+        expected_version = (
+            int(current["version"]["N"]) if "version" in current else None
         )
-        try:
-            with tracer.provider.in_subsegment("fanout_batch_write") as subseg:
-                subseg.put_annotation("error", True)
-                subseg.add_exception(e)
-        except Exception:
-            logger.debug("X-Ray subsegment failed", exc_info=True)
-        try:
-            emit_metric(
-                name="SilentFailure/Count",
-                value=1,
-                unit="Count",
-                dimensions={"FailurePath": "fanout_batch_write"},
-                namespace="SentimentAnalyzer/Reliability",
-            )
-        except Exception:
-            logger.debug("Metric emission failed", exc_info=True)
-        raise
+        count = int(current["count"]["N"]) + 1
+        total = _parse_number(current, "sum") + score.value
+        high = max(_parse_number(current, "high"), score.value)
+        low = min(_parse_number(current, "low"), score.value)
+
+        # Legacy buckets predate open_ts/close_ts; original_timestamp is the
+        # only ordering signal they carry.
+        fallback_ts = current.get("original_timestamp", {}).get("S", article_ts)
+        open_ts = current.get("open_ts", {}).get("S", fallback_ts)
+        close_ts = current.get("close_ts", {}).get("S", fallback_ts)
+        open_value = _parse_number(current, "open")
+        close_value = _parse_number(current, "close")
+        if article_ts < open_ts:
+            open_value, open_ts = score.value, article_ts
+        if article_ts >= close_ts:
+            close_value, close_ts = score.value, article_ts
+
+        label_counts = _parse_label_counts(current)
+        if score.label:
+            label_counts[score.label] = label_counts.get(score.label, 0) + 1
+        sources = _parse_sources(current)
+        if score.source:
+            sources.add(score.source)
+        version = (expected_version or 0) + 1
+
+    item: dict[str, Any] = {
+        "PK": {"S": f"{score.ticker}#{resolution.value}"},
+        "SK": {"S": bucket_timestamp.isoformat()},
+        "open": {"N": str(open_value)},
+        "high": {"N": str(high)},
+        "low": {"N": str(low)},
+        "close": {"N": str(close_value)},
+        "open_ts": {"S": open_ts},
+        "close_ts": {"S": close_ts},
+        "count": {"N": str(count)},
+        "sum": {"N": str(total)},
+        "avg": {"N": str(total / count)},
+        "ttl": {"N": str(ttl)},
+        "is_partial": {"BOOL": True},
+        "label_counts": {
+            "M": {label: {"N": str(n)} for label, n in label_counts.items()}
+        },
+        "version": {"N": str(version)},
+        "original_timestamp": {"S": close_ts},
+    }
+    if sources:
+        item["sources"] = {"SS": sorted(sources)}
+    return item, expected_version
 
 
-def write_fanout_with_update(
+def _read_bucket(
+    dynamodb: Any, table_name: str, pk: str, sk: str
+) -> dict[str, Any] | None:
+    response = dynamodb.get_item(
+        TableName=table_name,
+        Key={"PK": {"S": pk}, "SK": {"S": sk}},
+        ConsistentRead=True,
+    )
+    return response.get("Item")
+
+
+def accumulate_fanout(
     dynamodb: Any,
     table_name: str,
     score: SentimentScore,
 ) -> None:
     """
-    Write a sentiment score to all 6 resolution buckets using UpdateItem.
+    Accumulate one signed contribution into all 6 resolution buckets.
 
-    This version properly handles updating existing buckets by:
-    - Keeping original 'open' value
-    - Updating 'close' to latest value
-    - Updating 'high' if new value is higher
-    - Updating 'low' if new value is lower
-    - Incrementing count and sum
-
-    Canonical: [CS-001] "Pre-aggregate at write time for known query patterns"
-
-    Args:
-        dynamodb: boto3 DynamoDB client
-        table_name: Target table name
-        score: Sentiment score to write
+    Per resolution: read, compute complete next state, conditional PutItem.
+    The guard has two branches chosen by what the read returned:
+    `version = :expected` when the bucket carried a version, and
+    `attribute_not_exists(version)` when it did not, which covers absent
+    buckets and legacy pre-cutover buckets alike. Losers of a version race
+    re-read and retry with jittered backoff, bounded at MAX_RETRIES.
 
     Raises:
-        ValueError: If score.ticker is None
-        ClientError: On DynamoDB errors
+        ValueError: if score.ticker is missing
+        FanoutWriteError: when a bucket write fails after bounded retries
     """
     if not score.ticker:
         raise ValueError("Sentiment score must have a ticker for fanout")
 
     for resolution in Resolution:
         bucket_timestamp = floor_to_bucket(score.timestamp, resolution)
-        ttl = int(bucket_timestamp.timestamp()) + resolution.ttl_seconds
+        pk = f"{score.ticker}#{resolution.value}"
+        sk = bucket_timestamp.isoformat()
 
-        key = {
-            "PK": {"S": f"{score.ticker}#{resolution.value}"},
-            "SK": {"S": bucket_timestamp.isoformat()},
-        }
-
-        # Build update expression for upsert
-        # Initialize label_counts as empty map if not exists, then update nested key
-        update_expr = (
-            "SET "
-            "#open = if_not_exists(#open, :value), "
-            "#close = :value, "
-            "#high = if_not_exists(#high, :value), "
-            "#low = if_not_exists(#low, :value), "
-            "is_partial = :is_partial, "
-            "#ttl = :ttl, "
-            "sources = list_append(if_not_exists(sources, :empty_list), :source_list), "
-            "label_counts = if_not_exists(label_counts, :empty_map) "
-            "ADD #count :one, #sum :value"
-        )
-
-        expr_values: dict[str, Any] = {
-            ":value": {"N": str(score.value)},
-            ":one": {"N": "1"},
-            ":is_partial": {"BOOL": True},
-            ":ttl": {"N": str(ttl)},
-            ":empty_list": {"L": []},
-            ":source_list": {"L": [{"S": score.source}] if score.source else []},
-            ":empty_map": {"M": {}},
-        }
-
-        expr_names = {
-            "#open": "open",
-            "#close": "close",
-            "#high": "high",
-            "#low": "low",
-            "#count": "count",
-            "#sum": "sum",
-            "#ttl": "ttl",
-        }
-
-        # First update: Set base fields and initialize label_counts
-        try:
-            dynamodb.update_item(
-                TableName=table_name,
-                Key=key,
-                UpdateExpression=update_expr,
-                ExpressionAttributeValues=expr_values,
-                ExpressionAttributeNames=expr_names,
+        attempt = 0
+        while True:
+            current = _read_bucket(dynamodb, table_name, pk, sk)
+            item, expected_version = _next_state(
+                current, score, bucket_timestamp, resolution
             )
-        except ClientError as e:
-            logger.error(
-                "UpdateItem base failed",
-                extra={
-                    "error_code": e.response.get("Error", {}).get("Code"),
-                    "ticker": score.ticker,
-                    "resolution": resolution.value,
-                },
-            )
-            try:
-                with tracer.provider.in_subsegment("fanout_base_update") as subseg:
-                    subseg.put_annotation("error", True)
-                    subseg.add_exception(e)
-            except Exception:
-                logger.debug("X-Ray subsegment failed", exc_info=True)
-            try:
-                emit_metric(
-                    name="SilentFailure/Count",
-                    value=1,
-                    unit="Count",
-                    dimensions={"FailurePath": "fanout_base_update"},
-                    namespace="SentimentAnalyzer/Reliability",
-                )
-            except Exception:
-                logger.debug("Metric emission failed", exc_info=True)
-            raise
 
-        # Second update: Update label count (now that label_counts exists)
-        if score.label:
+            if expected_version is None:
+                condition = "attribute_not_exists(version)"
+                values = None
+            else:
+                condition = "version = :expected"
+                values = {":expected": {"N": str(expected_version)}}
+
+            kwargs: dict[str, Any] = {
+                "TableName": table_name,
+                "Item": item,
+                "ConditionExpression": condition,
+            }
+            if values:
+                kwargs["ExpressionAttributeValues"] = values
+
             try:
-                dynamodb.update_item(
-                    TableName=table_name,
-                    Key=key,
-                    UpdateExpression="ADD label_counts.#label :one",
-                    ExpressionAttributeValues={":one": {"N": "1"}},
-                    ExpressionAttributeNames={"#label": score.label},
-                )
+                dynamodb.put_item(**kwargs)
+                break
             except ClientError as e:
-                logger.error(
-                    "UpdateItem label_counts failed",
-                    extra={
-                        "error_code": e.response.get("Error", {}).get("Code"),
-                        "ticker": score.ticker,
-                        "resolution": resolution.value,
-                        "label": score.label,
-                    },
+                error_code = e.response.get("Error", {}).get("Code", "")
+                if error_code != "ConditionalCheckFailedException":
+                    logger.error(
+                        "Fanout PutItem failed",
+                        extra={
+                            "error_code": error_code,
+                            "ticker": score.ticker,
+                            "resolution": resolution.value,
+                            "window": sk,
+                        },
+                    )
+                    raise FanoutWriteError(
+                        ticker=score.ticker,
+                        resolution=resolution.value,
+                        window=sk,
+                        error_class=error_code or type(e).__name__,
+                    ) from e
+                attempt += 1
+                if attempt > MAX_RETRIES:
+                    raise FanoutWriteError(
+                        ticker=score.ticker,
+                        resolution=resolution.value,
+                        window=sk,
+                        error_class="ConditionalCheckFailedException",
+                    ) from e
+                # Full jitter so concurrent losers do not retry in lockstep
+                time.sleep(
+                    random.uniform(  # noqa: S311 - backoff jitter, not crypto
+                        BASE_BACKOFF_SECONDS / 2,
+                        BASE_BACKOFF_SECONDS * (2**attempt),
+                    )
                 )
-                try:
-                    with tracer.provider.in_subsegment("fanout_label_update") as subseg:
-                        subseg.put_annotation("error", True)
-                        subseg.add_exception(e)
-                except Exception:
-                    logger.debug("X-Ray subsegment failed", exc_info=True)
-                try:
-                    emit_metric(
-                        name="SilentFailure/Count",
-                        value=1,
-                        unit="Count",
-                        dimensions={"FailurePath": "fanout_label_update"},
-                        namespace="SentimentAnalyzer/Reliability",
-                    )
-                except Exception:
-                    logger.debug("Metric emission failed", exc_info=True)
-                raise
-
-        # Third update: Conditional update for high (if new value is higher)
-        try:
-            dynamodb.update_item(
-                TableName=table_name,
-                Key=key,
-                UpdateExpression="SET #high = :value",
-                ConditionExpression="#high < :value",
-                ExpressionAttributeValues={":value": {"N": str(score.value)}},
-                ExpressionAttributeNames={"#high": "high"},
-            )
-        except ClientError as e:
-            error_code = e.response.get("Error", {}).get("Code")
-            if error_code == "ConditionalCheckFailedException":
-                try:
-                    emit_metric(
-                        name="ConditionalCheck/Count",
-                        value=1,
-                        unit="Count",
-                        dimensions={"FailurePath": "fanout_conditional"},
-                        namespace="SentimentAnalyzer/Reliability",
-                    )
-                except Exception:
-                    logger.debug("Metric emission failed", exc_info=True)
-            else:
-                try:
-                    with tracer.provider.in_subsegment(
-                        "fanout_conditional_high"
-                    ) as subseg:
-                        subseg.put_annotation("error", True)
-                        subseg.add_exception(e)
-                except Exception:
-                    logger.debug("X-Ray subsegment failed", exc_info=True)
-                try:
-                    emit_metric(
-                        name="SilentFailure/Count",
-                        value=1,
-                        unit="Count",
-                        dimensions={"FailurePath": "fanout_conditional_unexpected"},
-                        namespace="SentimentAnalyzer/Reliability",
-                    )
-                except Exception:
-                    logger.debug("Metric emission failed", exc_info=True)
-                raise
-
-        # Fourth update: Conditional update for low (if new value is lower)
-        try:
-            dynamodb.update_item(
-                TableName=table_name,
-                Key=key,
-                UpdateExpression="SET #low = :value",
-                ConditionExpression="#low > :value",
-                ExpressionAttributeValues={":value": {"N": str(score.value)}},
-                ExpressionAttributeNames={"#low": "low"},
-            )
-        except ClientError as e:
-            error_code = e.response.get("Error", {}).get("Code")
-            if error_code == "ConditionalCheckFailedException":
-                try:
-                    emit_metric(
-                        name="ConditionalCheck/Count",
-                        value=1,
-                        unit="Count",
-                        dimensions={"FailurePath": "fanout_conditional"},
-                        namespace="SentimentAnalyzer/Reliability",
-                    )
-                except Exception:
-                    logger.debug("Metric emission failed", exc_info=True)
-            else:
-                try:
-                    with tracer.provider.in_subsegment(
-                        "fanout_conditional_low"
-                    ) as subseg:
-                        subseg.put_annotation("error", True)
-                        subseg.add_exception(e)
-                except Exception:
-                    logger.debug("X-Ray subsegment failed", exc_info=True)
-                try:
-                    emit_metric(
-                        name="SilentFailure/Count",
-                        value=1,
-                        unit="Count",
-                        dimensions={"FailurePath": "fanout_conditional_unexpected"},
-                        namespace="SentimentAnalyzer/Reliability",
-                    )
-                except Exception:
-                    logger.debug("Metric emission failed", exc_info=True)
-                raise

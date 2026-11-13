@@ -1070,6 +1070,10 @@ module "iam" {
   ohlc_cache_table_arn = module.dynamodb.ohlc_cache_table_arn
   # Feature 1219: X-Ray canary (T086, FR-051)
   enable_canary = true
+  # Feature 001-signed-fanout: operator-assumed backfill role
+  # Passed as a literal name: wiring module.eventbridge output here is a cycle
+  ingestion_schedule_rule_name = "${var.environment}-sentiment-ingestion-schedule"
+  operator_principal_arn       = var.operator_principal_arn
 }
 
 # ===================================================================

@@ -1,8 +1,8 @@
 """Integration tests for timeseries pipeline.
 
-Tests the complete data flow from sentiment score ingestion through
-write fanout to all 6 resolution buckets, query operations with time
-ordering, partial bucket detection, and OHLC aggregation accuracy.
+Tests the complete data flow from sentiment score ingestion through the
+accumulating write fanout to all 6 resolution buckets, query operations with
+time ordering, partial bucket detection, and OHLC aggregation accuracy.
 
 Canonical References:
 - [CS-001] AWS DynamoDB Best Practices: Write fanout, key design, TTL
@@ -24,7 +24,7 @@ import pytest
 from freezegun import freeze_time
 
 from src.lib.timeseries.bucket import calculate_bucket_progress
-from src.lib.timeseries.fanout import generate_fanout_items, write_fanout
+from src.lib.timeseries.fanout import accumulate_fanout
 from src.lib.timeseries.models import Resolution
 
 from .conftest import put_timeseries_item
@@ -32,7 +32,7 @@ from .conftest import put_timeseries_item
 
 class TestWriteFanout:
     """
-    Validate write fanout creates all resolution items.
+    Validate the accumulating fanout creates all resolution items.
 
     User Story 1 (P1): Verify single sentiment score correctly produces
     6 DynamoDB items (one per resolution level).
@@ -48,23 +48,20 @@ class TestWriteFanout:
 
         FR-003: Test suite MUST verify write fanout produces exactly 6 items
         (one per resolution) for each ingested score.
-
-        Acceptance: Given empty table, when single score ingested,
-        then exactly 6 items exist (1m, 5m, 15m, 30m, 1h, 24h).
         """
-        # Act: Write fanout
-        write_fanout(dynamodb_client, timeseries_table, sample_score)
+        accumulate_fanout(dynamodb_client, timeseries_table, sample_score)
 
-        # Assert: Exactly 6 items
         response = dynamodb_client.scan(TableName=timeseries_table)
         items = response.get("Items", [])
 
         assert len(items) == 6, f"Expected 6 items, got {len(items)}"
 
-        # Verify all resolutions present
         resolutions = {item["PK"]["S"].split("#")[1] for item in items}
         expected_resolutions = {"1m", "5m", "15m", "30m", "1h", "24h"}
         assert resolutions == expected_resolutions
+
+        # Every bucket is born versioned
+        assert all(item["version"]["N"] == "1" for item in items)
 
     def test_partition_key_format(
         self, dynamodb_client, timeseries_table, sample_score
@@ -74,14 +71,9 @@ class TestWriteFanout:
 
         FR-004: Test suite MUST verify partition key format follows
         `{ticker}#{resolution}` pattern.
-
-        Acceptance: Given score for ticker AAPL, when fanout completes,
-        then each item has PK like AAPL#1m, AAPL#5m, etc.
         """
-        # Act
-        write_fanout(dynamodb_client, timeseries_table, sample_score)
+        accumulate_fanout(dynamodb_client, timeseries_table, sample_score)
 
-        # Assert: All PKs match expected format
         response = dynamodb_client.scan(TableName=timeseries_table)
         items = response.get("Items", [])
 
@@ -105,27 +97,14 @@ class TestWriteFanout:
 
         FR-005: Test suite MUST verify sort key contains ISO8601 bucket
         timestamp aligned to resolution boundaries.
-
-        Acceptance: Given score at 10:35:47Z, when fanout completes,
-        then each resolution's bucket timestamp is correctly aligned:
-        - 1m: 10:35:00
-        - 5m: 10:35:00
-        - 15m: 10:30:00
-        - 30m: 10:30:00
-        - 1h: 10:00:00
-        - 24h: 00:00:00
         """
-        # Act
-        write_fanout(dynamodb_client, timeseries_table, sample_score)
+        accumulate_fanout(dynamodb_client, timeseries_table, sample_score)
 
-        # Assert: Check each resolution's SK alignment
         response = dynamodb_client.scan(TableName=timeseries_table)
         items = response.get("Items", [])
 
-        # Build PK -> SK mapping
         pk_to_sk = {item["PK"]["S"]: item["SK"]["S"] for item in items}
 
-        # Expected alignments per test-oracle.yaml
         expected = {
             "AAPL#1m": "2024-01-02T10:35:00+00:00",
             "AAPL#5m": "2024-01-02T10:35:00+00:00",
@@ -138,7 +117,6 @@ class TestWriteFanout:
         for pk, expected_sk in expected.items():
             actual_sk = pk_to_sk.get(pk)
             assert actual_sk is not None, f"Missing item for {pk}"
-            # Normalize to compare (handle Z vs +00:00)
             actual_dt = datetime.fromisoformat(actual_sk.replace("Z", "+00:00"))
             expected_dt = datetime.fromisoformat(expected_sk)
             assert actual_dt == expected_dt, (
@@ -164,11 +142,7 @@ class TestQueryOrdering:
 
         FR-006: Test suite MUST verify query results are returned in
         ascending timestamp order.
-
-        Acceptance: Given 5 buckets at 10:30, 10:35, 10:40, 10:45, 10:50,
-        when querying start=10:25 end=10:55, then all 5 return in order.
         """
-        # Arrange: Insert 5 buckets in order
         for ts in query_timestamps:
             put_timeseries_item(
                 dynamodb_client,
@@ -178,7 +152,6 @@ class TestQueryOrdering:
                 value=0.5,
             )
 
-        # Act: Query with range (DynamoDB returns sorted by SK)
         response = dynamodb_client.query(
             TableName=timeseries_table,
             KeyConditionExpression="PK = :pk AND SK BETWEEN :start AND :end",
@@ -191,7 +164,6 @@ class TestQueryOrdering:
 
         items = response.get("Items", [])
 
-        # Assert: 5 items in ascending order
         assert len(items) == 5
 
         sks = [item["SK"]["S"] for item in items]
@@ -205,11 +177,7 @@ class TestQueryOrdering:
     ):
         """
         Verify out-of-order insertion still returns sorted.
-
-        Acceptance: Given buckets inserted out of order (10:40, 10:30, 10:50, 10:35, 10:45),
-        when querying the range, then results are still in ascending order.
         """
-        # Arrange: Insert out of order
         out_of_order = [
             query_timestamps[2],  # 10:40
             query_timestamps[0],  # 10:30
@@ -227,7 +195,6 @@ class TestQueryOrdering:
                 value=0.5,
             )
 
-        # Act: Query
         response = dynamodb_client.query(
             TableName=timeseries_table,
             KeyConditionExpression="PK = :pk",
@@ -237,7 +204,6 @@ class TestQueryOrdering:
         items = response.get("Items", [])
         sks = [item["SK"]["S"] for item in items]
 
-        # Assert: Returned in ascending order regardless of insert order
         assert len(sks) == 5
         for i in range(len(sks) - 1):
             dt_i = datetime.fromisoformat(sks[i].replace("Z", "+00:00"))
@@ -247,13 +213,7 @@ class TestQueryOrdering:
     def test_empty_range_returns_empty_list(self, dynamodb_client, timeseries_table):
         """
         Verify empty list (not error) for no-match range.
-
-        Acceptance: Given a time range that spans no buckets,
-        when querying, then an empty list is returned (not an error).
         """
-        # Arrange: Table is empty (no data for this range)
-
-        # Act: Query a range with no data
         response = dynamodb_client.query(
             TableName=timeseries_table,
             KeyConditionExpression="PK = :pk AND SK BETWEEN :start AND :end",
@@ -266,7 +226,6 @@ class TestQueryOrdering:
 
         items = response.get("Items", [])
 
-        # Assert: Empty list, no error
         assert items == []
 
 
@@ -286,12 +245,7 @@ class TestPartialBucket:
         Verify mid-bucket is flagged as is_partial=True.
 
         FR-007: Test suite MUST verify partial bucket detection.
-
-        Acceptance: Given current time is mid-bucket (10:37:30 for 5m bucket
-        starting 10:35:00), when querying includes current bucket,
-        then response marks bucket as is_partial=True.
         """
-        # Arrange: Insert a bucket at current time window
         put_timeseries_item(
             dynamodb_client,
             timeseries_table,
@@ -301,7 +255,6 @@ class TestPartialBucket:
             is_partial=True,
         )
 
-        # Act: Query the bucket
         response = dynamodb_client.get_item(
             TableName=timeseries_table,
             Key={
@@ -312,7 +265,6 @@ class TestPartialBucket:
 
         item = response.get("Item")
 
-        # Assert
         assert item is not None
         assert item["is_partial"]["BOOL"] is True
 
@@ -322,47 +274,59 @@ class TestPartialBucket:
         Verify 50% progress at 2.5min into 5min bucket.
 
         Per Constitution Amendment 1.5: Use freezegun for deterministic time.
-
-        Acceptance: Given partial bucket at 50% progress (2.5 minutes into
-        5-minute bucket), when querying, then progress_pct is ~50%.
         """
-        # Arrange: Bucket starts at 10:35:00, current time is 10:37:30
-        # That's 2.5 minutes = 150 seconds into a 300-second bucket = 50%
         bucket_start = datetime(2024, 1, 2, 10, 35, 0, tzinfo=UTC)
 
-        # Act
         progress = calculate_bucket_progress(bucket_start, Resolution.FIVE_MINUTES)
 
-        # Assert
         assert progress == pytest.approx(50.0, rel=0.01)
 
     @freeze_time("2024-01-02T10:45:00+00:00")
     def test_complete_bucket_not_partial(self):
         """
-        Verify completed bucket has is_partial=False and 100%.
-
-        Acceptance: Given bucket that is fully complete (current time past
-        bucket end), when querying, then bucket has is_partial=False and 100%.
+        Verify completed bucket has 100% progress (capped).
         """
-        # Arrange: Bucket 10:35:00 to 10:40:00, current time 10:45:00
         bucket_start = datetime(2024, 1, 2, 10, 35, 0, tzinfo=UTC)
 
-        # Act
         progress = calculate_bucket_progress(bucket_start, Resolution.FIVE_MINUTES)
 
-        # Assert: 100% (capped)
         assert progress == 100.0
 
 
 class TestOHLCAggregation:
     """
-    Validate OHLC aggregation accuracy.
+    Validate OHLC aggregation accuracy through the accumulating writer.
 
     User Story 4 (P2): Verify multiple sentiment scores within a bucket
-    are correctly aggregated into OHLC values.
+    are correctly aggregated into OHLC values by accumulate_fanout itself,
+    not by test-local aggregation logic.
 
     Independent Test: pytest tests/integration/timeseries/test_timeseries_pipeline.py::TestOHLCAggregation -v
     """
+
+    # The table fixture is class-scoped, so each test accumulates into its
+    # own ticker to keep buckets independent.
+
+    def _accumulate_all(self, dynamodb_client, timeseries_table, ohlc_scores, ticker):
+        for score in ohlc_scores:
+            accumulate_fanout(
+                dynamodb_client,
+                timeseries_table,
+                score.model_copy(update={"ticker": ticker}),
+            )
+
+    def _get_bucket(self, dynamodb_client, timeseries_table, ticker):
+        response = dynamodb_client.get_item(
+            TableName=timeseries_table,
+            Key={
+                "PK": {"S": f"{ticker}#5m"},
+                "SK": {"S": "2024-01-02T10:35:00+00:00"},
+            },
+            ConsistentRead=True,
+        )
+        item = response.get("Item")
+        assert item is not None
+        return item
 
     def test_ohlc_values_correct(self, dynamodb_client, timeseries_table, ohlc_scores):
         """
@@ -370,184 +334,44 @@ class TestOHLCAggregation:
 
         FR-008: Test suite MUST verify OHLC aggregation produces correct
         open, high, low, close values.
-
-        Acceptance: Given 4 scores [0.6, 0.9, 0.3, 0.7] in timestamp order,
-        when bucket is queried, then OHLC values are:
-        open=0.6, high=0.9, low=0.3, close=0.7.
         """
-        # Arrange: Write scores using fanout (tests aggregation logic)
-        for score in ohlc_scores:
-            items = generate_fanout_items(score)
-            # We just test the 5m resolution item
-            item = next(i for i in items if "#5m" in i["PK"]["S"])
+        self._accumulate_all(dynamodb_client, timeseries_table, ohlc_scores, "OHLC")
 
-            # Get or update existing item
-            try:
-                existing = dynamodb_client.get_item(
-                    TableName=timeseries_table,
-                    Key={"PK": item["PK"], "SK": item["SK"]},
-                ).get("Item")
-            except Exception:
-                existing = None
-
-            if existing:
-                # Update OHLC - close is always latest, high/low need comparison
-                current_high = float(existing["high"]["N"])
-                current_low = float(existing["low"]["N"])
-                current_sum = float(existing["sum"]["N"])
-                current_count = int(existing["count"]["N"])
-
-                new_high = max(current_high, score.value)
-                new_low = min(current_low, score.value)
-                new_sum = current_sum + score.value
-                new_count = current_count + 1
-                new_avg = new_sum / new_count
-
-                dynamodb_client.update_item(
-                    TableName=timeseries_table,
-                    Key={"PK": item["PK"], "SK": item["SK"]},
-                    UpdateExpression="SET #high = :high, #low = :low, #close = :close, #sum = :sum, #count = :count, avg = :avg",
-                    ExpressionAttributeNames={
-                        "#high": "high",
-                        "#low": "low",
-                        "#close": "close",
-                        "#sum": "sum",
-                        "#count": "count",
-                    },
-                    ExpressionAttributeValues={
-                        ":high": {"N": str(new_high)},
-                        ":low": {"N": str(new_low)},
-                        ":close": {"N": str(score.value)},
-                        ":sum": {"N": str(new_sum)},
-                        ":count": {"N": str(new_count)},
-                        ":avg": {"N": str(new_avg)},
-                    },
-                )
-            else:
-                # First insert
-                dynamodb_client.put_item(TableName=timeseries_table, Item=item)
-
-        # Act: Query the bucket
-        response = dynamodb_client.get_item(
-            TableName=timeseries_table,
-            Key={
-                "PK": {"S": "AAPL#5m"},
-                "SK": {"S": "2024-01-02T10:35:00+00:00"},
-            },
-        )
-
-        item = response.get("Item")
-
-        # Assert: OHLC values per test-oracle.yaml
-        assert item is not None
+        item = self._get_bucket(dynamodb_client, timeseries_table, "OHLC")
         assert float(item["open"]["N"]) == pytest.approx(0.6, rel=0.001)
         assert float(item["high"]["N"]) == pytest.approx(0.9, rel=0.001)
         assert float(item["low"]["N"]) == pytest.approx(0.3, rel=0.001)
         assert float(item["close"]["N"]) == pytest.approx(0.7, rel=0.001)
+        # open/close ordering is backed by article timestamps
+        assert item["open_ts"]["S"] == "2024-01-02T10:35:10+00:00"
+        assert item["close_ts"]["S"] == "2024-01-02T10:35:40+00:00"
 
     def test_label_counts_aggregated(
         self, dynamodb_client, timeseries_table, ohlc_scores
     ):
         """
         Verify label_counts = {positive: 2, neutral: 1, negative: 1}.
-
-        Acceptance: Given scores with labels [positive, neutral, positive, negative],
-        when bucket is queried, then label_counts shows correct distribution.
         """
-        # Arrange: Insert items with label tracking
-        pk = "AAPL#5m"
-        sk = "2024-01-02T10:35:00+00:00"
+        self._accumulate_all(dynamodb_client, timeseries_table, ohlc_scores, "LBL")
 
-        # Initialize with first score
-        dynamodb_client.put_item(
-            TableName=timeseries_table,
-            Item={
-                "PK": {"S": pk},
-                "SK": {"S": sk},
-                "open": {"N": "0.6"},
-                "high": {"N": "0.9"},
-                "low": {"N": "0.3"},
-                "close": {"N": "0.7"},
-                "count": {"N": "4"},
-                "sum": {"N": "2.5"},
-                "avg": {"N": "0.625"},
-                "is_partial": {"BOOL": False},
-                "label_counts": {
-                    "M": {
-                        "positive": {"N": "2"},
-                        "neutral": {"N": "1"},
-                        "negative": {"N": "1"},
-                    }
-                },
-                "sources": {
-                    "L": [
-                        {"S": "test-1"},
-                        {"S": "test-2"},
-                        {"S": "test-3"},
-                        {"S": "test-4"},
-                    ]
-                },
-            },
-        )
-
-        # Act: Query
-        response = dynamodb_client.get_item(
-            TableName=timeseries_table,
-            Key={"PK": {"S": pk}, "SK": {"S": sk}},
-        )
-
-        item = response.get("Item")
-
-        # Assert
-        assert item is not None
+        item = self._get_bucket(dynamodb_client, timeseries_table, "LBL")
         label_counts = item["label_counts"]["M"]
         assert int(label_counts["positive"]["N"]) == 2
         assert int(label_counts["neutral"]["N"]) == 1
         assert int(label_counts["negative"]["N"]) == 1
 
-    def test_avg_and_count_calculated(
+    def test_avg_count_and_version_calculated(
         self, dynamodb_client, timeseries_table, ohlc_scores
     ):
         """
-        Verify avg=0.625, count=4.
+        Verify avg=0.625, count=4, version=4 after four contributions.
 
         Per RQ-005: Use pytest.approx for float comparisons.
-
-        Acceptance: Given scores [0.6, 0.8], then avg is 0.7 and count is 2.
-        (Using actual test data: 4 scores sum=2.5, avg=0.625, count=4)
         """
-        # Arrange
-        pk = "AAPL#5m"
-        sk = "2024-01-02T10:35:00+00:00"
+        self._accumulate_all(dynamodb_client, timeseries_table, ohlc_scores, "AVG")
 
-        # Sum of [0.6, 0.9, 0.3, 0.7] = 2.5, avg = 0.625
-        dynamodb_client.put_item(
-            TableName=timeseries_table,
-            Item={
-                "PK": {"S": pk},
-                "SK": {"S": sk},
-                "open": {"N": "0.6"},
-                "high": {"N": "0.9"},
-                "low": {"N": "0.3"},
-                "close": {"N": "0.7"},
-                "count": {"N": "4"},
-                "sum": {"N": "2.5"},
-                "avg": {"N": "0.625"},
-                "is_partial": {"BOOL": False},
-                "label_counts": {"M": {}},
-                "sources": {"L": []},
-            },
-        )
-
-        # Act
-        response = dynamodb_client.get_item(
-            TableName=timeseries_table,
-            Key={"PK": {"S": pk}, "SK": {"S": sk}},
-        )
-
-        item = response.get("Item")
-
-        # Assert
-        assert item is not None
+        item = self._get_bucket(dynamodb_client, timeseries_table, "AVG")
         assert int(item["count"]["N"]) == 4
+        assert float(item["sum"]["N"]) == pytest.approx(2.5, rel=0.001)
         assert float(item["avg"]["N"]) == pytest.approx(0.625, rel=0.001)
+        assert int(item["version"]["N"]) == 4

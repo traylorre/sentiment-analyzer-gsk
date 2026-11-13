@@ -225,3 +225,9 @@ variable "enable_cloudfront_waf" {
   type        = bool
   default     = true
 }
+
+variable "operator_principal_arn" {
+  description = "Principal trusted to assume the backfill-timeseries role; empty falls back to the account root (feature 001-signed-fanout)"
+  type        = string
+  default     = ""
+}

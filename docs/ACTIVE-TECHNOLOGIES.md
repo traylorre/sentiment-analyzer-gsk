@@ -21,7 +21,7 @@ per-spawn context. Architecture is in `docs/SERVICE-SHAPE.md`.
 | Charting | TradingView lightweight-charts and Chart.js (customer), Chart.js (admin) |
 | AWS | Lambda, DynamoDB, S3, SNS, EventBridge, Cognito, Amplify, API Gateway, CloudFront (SSE edge), WAF, KMS, Secrets Manager, X-Ray |
 | External | Tiingo and Finnhub (news), SendGrid (email), Stripe (payments), hCaptcha (bot protection) |
-| Tooling | Ruff, mypy, ESLint, Semgrep, pre-commit, Terraform (pinned by `.terraform-version`, enforced by the blocking `check-terraform-version` stage), infracost (`cost*` targets and the PR cost gate), pytest, hypothesis, python-hcl2 (HCL parsing in terraform tests), Playwright, Vitest, Testing Library |
+| Tooling | Ruff, mypy, ESLint, Semgrep, pre-commit, Terraform (pinned by `.terraform-version`, enforced by the blocking `check-terraform-version` stage), infracost (`cost*` targets and the PR cost gate), pytest, hypothesis, moto, freezegun, python-hcl2 (HCL parsing in terraform tests), Playwright, Vitest, Testing Library |
 
 ## test-e2e
 

@@ -26,6 +26,7 @@ from unittest.mock import MagicMock, patch
 
 import boto3
 import pytest
+from freezegun import freeze_time
 from moto import mock_aws
 
 from src.lambdas.analysis.handler import (
@@ -648,3 +649,378 @@ class TestSNSMessageParsing:
 
         # Verify text was passed to analyze
         mock_analyze.assert_called_once_with("Custom text for testing")
+
+
+class TestSignedFanoutHop:
+    """FR-001/FR-008: the value handed to the fanout writer is signed, while the
+    stored per-article record keeps the unsigned model confidence."""
+
+    FROZEN_NOW = "2025-11-17T15:00:00Z"
+
+    def _run_handler(self, sns_event, mock_context, label, confidence):
+        captured = []
+
+        def capture_fanout(dynamodb, table_name, sentiment_score):
+            captured.append(sentiment_score)
+
+        os.environ["TIMESERIES_TABLE"] = "test-sentiment-timeseries"
+        try:
+            with (
+                patch("src.lambdas.analysis.handler.load_model"),
+                patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze,
+                patch(
+                    "src.lambdas.analysis.handler.get_model_load_time_ms"
+                ) as mock_load_time,
+                patch("src.lambdas.analysis.handler.accumulate_fanout", capture_fanout),
+                patch("src.lib.metrics.emit_metric"),
+                patch("src.lib.metrics.emit_metrics_batch"),
+            ):
+                mock_analyze.return_value = (label, confidence)
+                mock_load_time.return_value = 0
+                result = lambda_handler(sns_event, mock_context)
+        finally:
+            os.environ.pop("TIMESERIES_TABLE", None)
+        return result, captured
+
+    def _sns_event_with_tickers(self, sns_event):
+        message = json.loads(sns_event["Records"][0]["Sns"]["Message"])
+        message["matched_tickers"] = ["AAPL"]
+        sns_event["Records"][0]["Sns"]["Message"] = json.dumps(message)
+        return sns_event
+
+    @mock_aws
+    @freeze_time(FROZEN_NOW)
+    def test_negative_arrives_signed(self, env_vars, sns_event, mock_context):
+        TestLambdaHandler._setup_dynamodb_with_pending_item(TestLambdaHandler())
+        event = self._sns_event_with_tickers(sns_event)
+
+        _, captured = self._run_handler(event, mock_context, "negative", 0.9)
+
+        assert len(captured) == 1
+        assert captured[0].value == -0.9
+
+    @mock_aws
+    @freeze_time(FROZEN_NOW)
+    def test_neutral_arrives_zero(self, env_vars, sns_event, mock_context):
+        TestLambdaHandler._setup_dynamodb_with_pending_item(TestLambdaHandler())
+        event = self._sns_event_with_tickers(sns_event)
+
+        _, captured = self._run_handler(event, mock_context, "neutral", 0.55)
+
+        assert len(captured) == 1
+        assert captured[0].value == 0.0
+
+    @mock_aws
+    @freeze_time(FROZEN_NOW)
+    def test_positive_arrives_signed(self, env_vars, sns_event, mock_context):
+        TestLambdaHandler._setup_dynamodb_with_pending_item(TestLambdaHandler())
+        event = self._sns_event_with_tickers(sns_event)
+
+        _, captured = self._run_handler(event, mock_context, "positive", 0.8)
+
+        assert len(captured) == 1
+        assert captured[0].value == 0.8
+
+    @mock_aws
+    @freeze_time(FROZEN_NOW)
+    def test_item_record_score_stays_unsigned(self, env_vars, sns_event, mock_context):
+        """FR-008: the per-article record's score field remains unsigned confidence."""
+        TestLambdaHandler._setup_dynamodb_with_pending_item(TestLambdaHandler())
+        event = self._sns_event_with_tickers(sns_event)
+
+        self._run_handler(event, mock_context, "negative", 0.78)
+
+        table = boto3.resource("dynamodb", region_name="us-east-1").Table(
+            "test-sentiment-items"
+        )
+        item = table.get_item(
+            Key={
+                "source_id": "article#abc123def456",
+                "timestamp": "2025-11-17T14:30:15.000Z",
+            }
+        )["Item"]
+        assert float(item["score"]) == 0.78
+        assert item["sentiment"] == "negative"
+
+
+class TestFanoutTimestampBounds:
+    """FR-010: article timestamps outside [now - 30d, now + 5min] skip fanout
+    only; the item still stores; the reject is loud but carries no raw text."""
+
+    FROZEN_NOW = "2025-11-17T15:00:00Z"
+
+    def _run(self, mock_context, article_ts, metrics):
+        message = {
+            "source_id": "article#abc123def456",
+            "source_type": "tiingo",
+            "text_for_analysis": "SECRET-ARTICLE-BODY should never be logged",
+            "model_version": "v1.0.0",
+            "matched_tickers": ["AAPL"],
+            "sources": ["tiingo"],
+            "timestamp": article_ts,
+        }
+        event = {"Records": [{"Sns": {"Message": json.dumps(message)}}]}
+
+        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+        dynamodb.create_table(
+            TableName="test-sentiment-items",
+            KeySchema=[
+                {"AttributeName": "source_id", "KeyType": "HASH"},
+                {"AttributeName": "timestamp", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "source_id", "AttributeType": "S"},
+                {"AttributeName": "timestamp", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+        dynamodb.Table("test-sentiment-items").put_item(
+            Item={
+                "source_id": "article#abc123def456",
+                "timestamp": article_ts,
+                "status": "pending",
+                "text_for_analysis": "SECRET-ARTICLE-BODY should never be logged",
+            }
+        )
+
+        def record_metric(name, value=1, **kwargs):
+            metrics.append({"name": name, "value": value, **kwargs})
+
+        os.environ["TIMESERIES_TABLE"] = "test-sentiment-timeseries"
+        try:
+            with (
+                patch("src.lambdas.analysis.handler.load_model"),
+                patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze,
+                patch(
+                    "src.lambdas.analysis.handler.get_model_load_time_ms"
+                ) as mock_load_time,
+                patch(
+                    "src.lambdas.analysis.handler.accumulate_fanout"
+                ) as mock_accumulate,
+                patch("src.lambdas.analysis.handler.emit_metric", record_metric),
+                patch("src.lib.metrics.emit_metrics_batch"),
+            ):
+                mock_analyze.return_value = ("negative", 0.9)
+                mock_load_time.return_value = 0
+                result = lambda_handler({"Records": event["Records"]}, mock_context)
+        finally:
+            os.environ.pop("TIMESERIES_TABLE", None)
+        return result, mock_accumulate
+
+    @mock_aws
+    @freeze_time(FROZEN_NOW)
+    def test_future_timestamp_skips_fanout_stores_item(
+        self, env_vars, mock_context, caplog
+    ):
+        metrics = []
+        result, mock_accumulate = self._run(
+            mock_context, "2025-11-17T15:10:00.000Z", metrics
+        )
+
+        assert result["statusCode"] == 200
+        assert result["body"]["updated"] is True
+        mock_accumulate.assert_not_called()
+        assert any(m["name"] == "TimeseriesFanoutRejectedTimestamp" for m in metrics)
+        app_records = [r for r in caplog.records if r.name.startswith("src.lambdas")]
+        assert app_records, "expected a structured rejection warning"
+        for record in app_records:
+            assert "SECRET-ARTICLE-BODY" not in record.getMessage()
+            assert "SECRET-ARTICLE-BODY" not in str(record.__dict__)
+
+    @mock_aws
+    @freeze_time(FROZEN_NOW)
+    def test_stale_timestamp_skips_fanout_stores_item(
+        self, env_vars, mock_context, caplog
+    ):
+        metrics = []
+        result, mock_accumulate = self._run(
+            mock_context, "2025-10-01T15:00:00.000Z", metrics
+        )
+
+        assert result["statusCode"] == 200
+        assert result["body"]["updated"] is True
+        mock_accumulate.assert_not_called()
+        assert any(m["name"] == "TimeseriesFanoutRejectedTimestamp" for m in metrics)
+        app_records = [r for r in caplog.records if r.name.startswith("src.lambdas")]
+        assert app_records, "expected a structured rejection warning"
+        for record in app_records:
+            assert "SECRET-ARTICLE-BODY" not in record.getMessage()
+            assert "SECRET-ARTICLE-BODY" not in str(record.__dict__)
+
+    @mock_aws
+    @freeze_time(FROZEN_NOW)
+    def test_in_bounds_timestamp_reaches_fanout(self, env_vars, mock_context):
+        metrics = []
+        _, mock_accumulate = self._run(
+            mock_context, "2025-11-17T14:30:15.000Z", metrics
+        )
+
+        assert mock_accumulate.called
+        assert not any(
+            m["name"] == "TimeseriesFanoutRejectedTimestamp" for m in metrics
+        )
+
+
+class TestFanoutFailureRecording:
+    """FR-009: retries exhausted -> one structured record carrying ticker,
+    resolution, window and error class; TimeseriesFanoutErrors incremented
+    with no added dimension (research D4)."""
+
+    FROZEN_NOW = "2025-11-17T15:00:00Z"
+
+    @mock_aws
+    @freeze_time(FROZEN_NOW)
+    def test_exhausted_retries_recorded(self, env_vars, mock_context, capsys):
+        from src.lib.timeseries.fanout import FanoutWriteError
+
+        message = {
+            "source_id": "article#abc123def456",
+            "source_type": "tiingo",
+            "text_for_analysis": "irrelevant",
+            "model_version": "v1.0.0",
+            "matched_tickers": ["AAPL"],
+            "sources": ["tiingo"],
+            "timestamp": "2025-11-17T14:30:15.000Z",
+        }
+        event = {"Records": [{"Sns": {"Message": json.dumps(message)}}]}
+
+        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+        dynamodb.create_table(
+            TableName="test-sentiment-items",
+            KeySchema=[
+                {"AttributeName": "source_id", "KeyType": "HASH"},
+                {"AttributeName": "timestamp", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "source_id", "AttributeType": "S"},
+                {"AttributeName": "timestamp", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+        dynamodb.Table("test-sentiment-items").put_item(
+            Item={
+                "source_id": "article#abc123def456",
+                "timestamp": "2025-11-17T14:30:15.000Z",
+                "status": "pending",
+                "text_for_analysis": "irrelevant",
+            }
+        )
+
+        metrics = []
+
+        def record_metric(name, value=1, **kwargs):
+            metrics.append({"name": name, "value": value, "kwargs": kwargs})
+
+        error = FanoutWriteError(
+            ticker="AAPL",
+            resolution="24h",
+            window="2025-11-17T00:00:00+00:00",
+            error_class="ConditionalCheckFailedException",
+        )
+
+        os.environ["TIMESERIES_TABLE"] = "test-sentiment-timeseries"
+        try:
+            with (
+                patch("src.lambdas.analysis.handler.load_model"),
+                patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze,
+                patch(
+                    "src.lambdas.analysis.handler.get_model_load_time_ms"
+                ) as mock_load_time,
+                patch(
+                    "src.lambdas.analysis.handler.accumulate_fanout",
+                    side_effect=error,
+                ),
+                patch("src.lambdas.analysis.handler.emit_metric", record_metric),
+                patch("src.lib.metrics.emit_metrics_batch"),
+            ):
+                mock_analyze.return_value = ("negative", 0.9)
+                mock_load_time.return_value = 0
+                result = lambda_handler(event, mock_context)
+        finally:
+            os.environ.pop("TIMESERIES_TABLE", None)
+
+        # Lambda still succeeds; fanout is supplementary
+        assert result["statusCode"] == 200
+
+        errors = [m for m in metrics if m["name"] == "TimeseriesFanoutErrors"]
+        assert len(errors) == 1
+        assert not errors[0]["kwargs"].get("dimensions")
+
+        # The structured record carries the repair coordinates
+        # (log_structured prints JSON to stdout; Lambda ships stdout to CloudWatch)
+        out = capsys.readouterr().out
+        failure_lines = [
+            line
+            for line in out.splitlines()
+            if "Time-series fanout failed after retries" in line
+        ]
+        assert len(failure_lines) == 1
+        record = json.loads(failure_lines[0])
+        assert record["ticker"] == "AAPL"
+        assert record["resolution"] == "24h"
+        assert record["window"] == "2025-11-17T00:00:00+00:00"
+        assert record["error_class"] == "ConditionalCheckFailedException"
+
+
+class TestFanoutIdempotencyGate:
+    """FR-003 / spec A2: a redelivered SNS message does not double count,
+    because the analyzed-status conditional update still gates fanout."""
+
+    FROZEN_NOW = "2025-11-17T15:00:00Z"
+
+    @mock_aws
+    @freeze_time(FROZEN_NOW)
+    def test_redelivery_skips_fanout(self, env_vars, sns_event, mock_context):
+        dynamodb = boto3.resource("dynamodb", region_name="us-east-1")
+        dynamodb.create_table(
+            TableName="test-sentiment-items",
+            KeySchema=[
+                {"AttributeName": "source_id", "KeyType": "HASH"},
+                {"AttributeName": "timestamp", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "source_id", "AttributeType": "S"},
+                {"AttributeName": "timestamp", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+        dynamodb.Table("test-sentiment-items").put_item(
+            Item={
+                "source_id": "article#abc123def456",
+                "timestamp": "2025-11-17T14:30:15.000Z",
+                "status": "pending",
+                "text_for_analysis": "Test text",
+            }
+        )
+
+        message = json.loads(sns_event["Records"][0]["Sns"]["Message"])
+        message["matched_tickers"] = ["AAPL"]
+        message["sources"] = ["tiingo"]
+        sns_event["Records"][0]["Sns"]["Message"] = json.dumps(message)
+
+        os.environ["TIMESERIES_TABLE"] = "test-sentiment-timeseries"
+        try:
+            with (
+                patch("src.lambdas.analysis.handler.load_model"),
+                patch("src.lambdas.analysis.handler.analyze_sentiment") as mock_analyze,
+                patch(
+                    "src.lambdas.analysis.handler.get_model_load_time_ms"
+                ) as mock_load_time,
+                patch(
+                    "src.lambdas.analysis.handler.accumulate_fanout"
+                ) as mock_accumulate,
+                patch("src.lib.metrics.emit_metric"),
+                patch("src.lib.metrics.emit_metrics_batch"),
+            ):
+                mock_analyze.return_value = ("negative", 0.9)
+                mock_load_time.return_value = 0
+
+                first = lambda_handler(sns_event, mock_context)
+                second = lambda_handler(sns_event, mock_context)
+        finally:
+            os.environ.pop("TIMESERIES_TABLE", None)
+
+        assert first["body"]["updated"] is True
+        assert second["body"]["updated"] is False
+        # Fanout ran exactly once: the redelivery never reached it
+        assert mock_accumulate.call_count == 1

@@ -49,7 +49,7 @@ import json
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -75,7 +75,8 @@ from src.lib.metrics import (
     emit_metrics_batch,
     log_structured,
 )
-from src.lib.timeseries import SentimentScore, write_fanout
+from src.lib.timeseries import FanoutWriteError, SentimentScore, accumulate_fanout
+from src.lib.timeseries.signed import label_to_signed
 
 # Structured logging
 logger = logging.getLogger(__name__)
@@ -127,6 +128,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         model_version = message["model_version"]
         # Feature 1009: Extract tickers for time-series fanout
         matched_tickers = message.get("matched_tickers", [])
+        # Feature 001-signed-fanout: provider names for bucket source tracking
+        provider_sources = message.get("sources", [])
 
         log_structured(
             "INFO",
@@ -179,7 +182,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
                 score=score,
                 sentiment=sentiment,
                 timestamp=timestamp,
-                source_id=source_id,
+                sources=provider_sources,
             )
 
         # Calculate total execution time
@@ -305,7 +308,8 @@ def _update_item_with_sentiment(
         source_id: Item partition key
         timestamp: Item sort key
         sentiment: Analysis result (positive/negative/neutral)
-        score: Confidence score 0.0-1.0
+        score: Unsigned model confidence 0.0-1.0, stored unchanged (FR-008);
+            the signed mapping happens only at the timeseries fanout hop
         model_version: Model version used
 
     Returns:
@@ -423,27 +427,31 @@ def _get_dynamodb_client() -> Any:
     return _dynamodb_client
 
 
+# FR-010 timestamp bounds: reject, don't clamp (research D3)
+FANOUT_MAX_FUTURE = timedelta(minutes=5)
+FANOUT_MAX_AGE = timedelta(days=30)
+
+
 @tracer.capture_method
 def _write_timeseries_fanout(
     tickers: list[str],
     score: float,
     sentiment: str,
     timestamp: str,
-    source_id: str,
+    sources: list[str],
 ) -> None:
-    """Write sentiment score to time-series table for all matched tickers.
+    """Accumulate the signed contribution into time-series buckets for all
+    matched tickers.
 
-    Feature 1009: Write fanout for multi-resolution sentiment time-series.
-
-    Canonical: [CS-001] "Pre-aggregate at write time for known query patterns"
-    Canonical: [CS-003] "Write amplification acceptable when reads >> writes"
+    Feature 001-signed-fanout: signed values via label_to_signed, accumulating
+    buckets via accumulate_fanout, provider names from the SNS sources field.
 
     Args:
         tickers: List of ticker symbols this sentiment applies to
-        score: Sentiment score (0.0-1.0)
+        score: Unsigned model confidence; signed at this hop
         sentiment: Sentiment label (positive/negative/neutral)
         timestamp: ISO8601 timestamp of the original article
-        source_id: Source ID for tracking
+        sources: Provider names from the SNS message (tiingo/finnhub)
 
     Note:
         Failures are logged but don't fail the Lambda - time-series is
@@ -464,6 +472,21 @@ def _write_timeseries_fanout(
         )
         return
 
+    # FR-010: article timestamps outside [now - 30d, now + 5min] skip fanout
+    # only; the per-article record has already stored. No raw text logged.
+    now = datetime.now(UTC)
+    if ts > now + FANOUT_MAX_FUTURE or ts < now - FANOUT_MAX_AGE:
+        logger.warning(
+            "Article timestamp outside fanout bounds, skipping fanout",
+            extra={
+                "tickers": tickers,
+                "timestamp_age_seconds": (now - ts).total_seconds(),
+            },
+        )
+        emit_metric("TimeseriesFanoutRejectedTimestamp", 1)
+        return
+
+    provider = sources[0] if sources else None
     dynamodb = _get_dynamodb_client()
     fanout_count = 0
     fanout_errors = 0
@@ -472,13 +495,25 @@ def _write_timeseries_fanout(
         try:
             sentiment_score = SentimentScore(
                 ticker=ticker.upper(),
-                value=score,
+                value=label_to_signed(sentiment, score),
                 timestamp=ts,
                 label=sentiment,
-                source=source_id,
+                source=provider,
             )
-            write_fanout(dynamodb, timeseries_table, sentiment_score)
+            accumulate_fanout(dynamodb, timeseries_table, sentiment_score)
             fanout_count += 1
+        except FanoutWriteError as e:
+            # FR-009: one structured record carrying the repair coordinates;
+            # repair is the targeted backfill (quickstart.md runbook)
+            fanout_errors += 1
+            log_structured(
+                "ERROR",
+                "Time-series fanout failed after retries",
+                ticker=e.ticker,
+                resolution=e.resolution,
+                window=e.window,
+                error_class=e.error_class,
+            )
         except Exception as e:
             fanout_errors += 1
             logger.warning(
